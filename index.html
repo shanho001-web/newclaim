@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系統入口</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f9f9f9; }
+        .box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align: center; }
+        .section { display: none; }
+        .section.active { display: block; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; }
+        .link { color: #666; cursor: pointer; text-decoration: underline; font-size: 14px; margin-top: 10px; display: block; }
+        h2 { margin-top: 0; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <!-- Admin 登入區 -->
+    <div id="admin-sec" class="section active">
+        <h2>Admin 登入</h2>
+        <input type="text" id="admin-id" placeholder="Admin ID">
+        <input type="password" id="admin-pw" placeholder="Password">
+        <button onclick="loginAdmin()">確認</button>
+        <span class="link" onclick="switchSec('member-login-sec')">轉入會員頁</span>
+    </div>
+
+    <!-- 會員登入區 -->
+    <div id="member-login-sec" class="section">
+        <h2>會員登入</h2>
+        <input type="email" id="login-email" placeholder="會員 Email">
+        <input type="password" id="login-pw" placeholder="密碼">
+        <button onclick="loginMember()">登入</button>
+        <span class="link" onclick="switchSec('request-reg-sec')">非會員？點此申請註冊</span>
+        <span class="link" onclick="switchSec('admin-sec')">返回 Admin</span>
+    </div>
+
+    <!-- 申請註冊區 (發送 Email) -->
+    <div id="request-reg-sec" class="section">
+        <h2>申請註冊</h2>
+        <p style="font-size: 12px; color: #666;">輸入 Email，系統將產生驗證碼並傳送給管理員 (shanho001@gmail.com)。管理員回覆後請前往驗證。</p>
+        <input type="email" id="req-email" placeholder="你的 Email">
+        <button onclick="requestRegistration()">索取驗證碼</button>
+        <span class="link" onclick="switchSec('verify-reg-sec')">已有驗證碼？前往驗證</span>
+        <span class="link" onclick="switchSec('member-login-sec')">返回登入</span>
+    </div>
+
+    <!-- 驗證並註冊區 -->
+    <div id="verify-reg-sec" class="section">
+        <h2>驗證與註冊</h2>
+        <input type="email" id="reg-email" placeholder="輸入申請的 Email">
+        <input type="text" id="reg-code" placeholder="輸入管理員給的 6 位驗證碼">
+        <input type="password" id="reg-pw" placeholder="自訂新密碼">
+        <button onclick="verifyAndRegister()">確認註冊</button>
+        <span class="link" onclick="switchSec('member-login-sec')">返回登入</span>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ⚠️ 替換成你的 Firebase 設定 (從 Firebase Console 取得)
+    const firebaseConfig =  {
+  apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
+  authDomain: "new-claim-dcc61.firebaseapp.com",
+  projectId: "new-claim-dcc61",
+  storageBucket: "new-claim-dcc61.firebasestorage.app",
+  messagingSenderId: "589308572721",
+  appId: "1:589308572721:web:4da5c6d74711134f0dd110",
+  measurementId: "G-RBJV5E2VKL"
+};
+
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // 切換畫面顯示
+    window.switchSec = (secId) => {
+        document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+        document.getElementById(secId).classList.add('active');
+    };
+
+    // 1. Admin 登入 (隱藏要求)
+    window.loginAdmin = () => {
+        const id = document.getElementById('admin-id').value;
+        const pw = document.getElementById('admin-pw').value;
+        if (id === 'admin' && pw === '61399638') {
+            sessionStorage.setItem('role', 'admin'); // 記錄 Admin 身分
+            window.location.href = 'dashboard.html';
+        } else {
+            alert('Admin 帳號或密碼錯誤！');
+        }
+    };
+
+    // 2. 會員登入
+    window.loginMember = async () => {
+        const email = document.getElementById('login-email').value;
+        const pw = document.getElementById('login-pw').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, pw);
+            sessionStorage.setItem('role', 'member');
+            window.location.href = 'dashboard.html';
+        } catch (e) { alert("登入失敗: " + e.message); }
+    };
+
+    // 3. 申請註冊 (產生驗證碼存入 DB，並觸發 Email 給你)
+    window.requestRegistration = async () => {
+        const email = document.getElementById('req-email').value;
+        if(!email) return alert('請輸入 Email');
+        
+        // 隨機產生 6 位數驗證碼
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        try {
+            // 將驗證碼存入 Firestore
+            await setDoc(doc(db, "registration_codes", email), { code: code, used: false });
+            
+            // 呼叫本機 Email 軟體發信給管理員
+            const adminEmail = "shanho001@gmail.com";
+            const subject = encodeURIComponent("新會員註冊申請");
+            const body = encodeURIComponent(`有新會員申請註冊。\n\n申請者 Email: ${email}\n系統產生的驗證碼: ${code}\n\n請將此驗證碼回覆給該會員。`);
+            window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${body}`;
+            
+            alert('已產生驗證碼並記錄。請檢查你的 Email 軟體發送給管理員。');
+            switchSec('verify-reg-sec');
+        } catch(e) { alert("申請失敗: " + e.message); }
+    };
+
+    // 4. 驗證並註冊
+    window.verifyAndRegister = async () => {
+        const email = document.getElementById('reg-email').value;
+        const code = document.getElementById('reg-code').value;
+        const pw = document.getElementById('reg-pw').value;
+
+        try {
+            // 檢查 Firestore 中的驗證碼
+            const docSnap = await getDoc(doc(db, "registration_codes", email));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.code === code && data.used === false) {
+                    // 驗證成功，建立 Firebase 帳號
+                    await createUserWithEmailAndPassword(auth, email, pw);
+                    // 標記驗證碼已使用
+                    await updateDoc(doc(db, "registration_codes", email), { used: true });
+                    alert('註冊成功！自動為您轉回會員登入頁。');
+                    switchSec('member-login-sec');
+                } else {
+                    alert('驗證碼錯誤或已被使用！');
+                }
+            } else {
+                alert('找不到此 Email 的申請紀錄！');
+            }
+        } catch (e) { alert("註冊失敗: " + e.message); }
+    };
+</script>
+</body>
+</html>
