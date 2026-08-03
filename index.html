@@ -3,150 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>會員系統 - 登入與註冊</title>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <title>索償系統 - 登入與註冊</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f9f9f9; }
-        .container { max-width: 400px; margin: 40px auto; border: 1px solid #e0e0e0; padding: 25px; border-radius: 12px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        .section { display: none; }
-        .section.active { display: block; }
-        h2 { margin-top: 0; font-size: 20px; text-align: center; color: #333; }
-        label { display: block; margin-top: 12px; font-size: 14px; color: #666; }
-        input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-        .pw-wrapper { position: relative; }
-        .toggle-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #888; font-size: 13px; width: auto; padding: 0; }
-        button.primary-btn { background: #000; color: #fff; padding: 12px; border: none; width: 100%; border-radius: 6px; cursor: pointer; font-size: 15px; margin-top: 18px; }
-        button.primary-btn:hover { background: #222; }
-        .link-bar { text-align: center; margin-top: 15px; font-size: 13px; }
-        .link-bar a { color: #0066cc; text-decoration: none; cursor: pointer; }
-        .notice-box { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px; border-radius: 6px; font-size: 12px; color: #8c8c00; margin-top: 15px; text-align: center; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; font-weight: bold; color: #888; }
+        .tab.active { color: #007aff; border-bottom: 2px solid #007aff; }
+        .form-group { display: none; }
+        .form-group.active { display: block; }
+        .input-group { margin-bottom: 15px; position: relative; }
+        label { display: block; font-size: 14px; color: #666; margin-bottom: 5px; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        .pw-container { position: relative; }
+        .toggle-pw { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #888; font-size: 12px; user-select: none; }
+        .code-group { display: flex; gap: 8px; }
+        .code-group input { flex: 1; }
+        .code-group button { width: auto; padding: 0 12px; font-size: 13px; white-space: nowrap; }
+        button { width: 100%; padding: 12px; background: #007aff; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        button:hover { background: #005bb5; }
+        .sub-btn { background: #34c759; }
+        .sub-btn:hover { background: #28a745; }
+        .switch-link { text-align: center; margin-top: 15px; font-size: 14px; color: #007aff; cursor: pointer; }
+        .hint { font-size: 12px; color: #e67e22; margin-top: 4px; }
     </style>
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 </head>
 <body>
 
-<div class="container">
-    
-    <!-- Admin 登入 -->
-    <div id="admin-login-sec" class="section">
+<div class="card">
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('member')">會員專區</div>
+        <div class="tab" onclick="switchTab('admin')">管理員登入</div>
+    </div>
+
+    <!-- 1. 會員登入 / 註冊表單 -->
+    <div id="member-form" class="form-group active">
+        <!-- 登入模式 -->
+        <div id="login-box">
+            <h2>會員登入</h2>
+            <div class="input-group">
+                <label>電郵地址</label>
+                <input type="email" id="member-email" placeholder="example@domain.com">
+            </div>
+            <div class="input-group">
+                <label>密碼</label>
+                <div class="pw-container">
+                    <input type="password" id="member-pw" placeholder="請輸入密碼">
+                    <span class="toggle-pw" onclick="togglePassword('member-pw', this)">顯示</span>
+                </div>
+            </div>
+            <button onclick="loginMember()">登入</button>
+            <div class="switch-link" onclick="toggleRegisterView(true)">未有帳號？按此註冊</div>
+        </div>
+
+        <!-- 註冊模式 -->
+        <div id="register-box" style="display: none;">
+            <h2>會員註冊</h2>
+            <div class="input-group">
+                <label>電郵地址</label>
+                <div class="code-group">
+                    <input type="email" id="reg-email" placeholder="example@domain.com">
+                    <button type="button" class="sub-btn" onclick="sendVerificationCode()">發送驗證碼</button>
+                </div>
+                <div class="hint">*若收不到郵件，請檢查「垃圾郵件 (Spam)」資料夾</div>
+            </div>
+            <div class="input-group">
+                <label>6位數驗證碼</label>
+                <input type="text" id="reg-code" maxlength="6" placeholder="請輸入驗證碼">
+            </div>
+            <div class="input-group">
+                <label>設定密碼</label>
+                <div class="pw-container">
+                    <input type="password" id="reg-pw" placeholder="至少6位數">
+                    <span class="toggle-pw" onclick="togglePassword('reg-pw', this)">顯示</span>
+                </div>
+            </div>
+            <button class="sub-btn" onclick="registerMember()">完成註冊並登入</button>
+            <div class="switch-link" onclick="toggleRegisterView(false)">已有帳號？返回登入</div>
+        </div>
+    </div>
+
+    <!-- 2. 管理員登入表單 -->
+    <div id="admin-form" class="form-group">
         <h2>管理員登入</h2>
-        <label>帳號</label>
-        <input type="text" id="admin-id" placeholder="請輸入管理員帳號">
-        
-        <label>密碼</label>
-        <div class="pw-wrapper">
-            <input type="password" id="admin-pw" placeholder="請輸入密碼">
-            <button type="button" class="toggle-btn" onclick="togglePw('admin-pw')">顯示</button>
+        <div class="input-group">
+            <label>帳號</label>
+            <input type="text" id="admin-id" placeholder="請輸入管理員帳號" value="Admin">
         </div>
-        
-        <button type="button" class="primary-btn" onclick="loginAdmin()">登入後台</button>
-        <div class="link-bar">
-            <a onclick="switchSec('member-login-sec')">切換至會員登入</a>
+        <div class="input-group">
+            <label>密碼</label>
+            <div class="pw-container">
+                <input type="password" id="admin-pw" placeholder="請輸入密碼">
+                <span class="toggle-pw" onclick="togglePassword('admin-pw', this)">顯示</span>
+            </div>
         </div>
+        <button onclick="loginAdmin()">登入系統</button>
     </div>
-
-    <!-- 會員登入 -->
-    <div id="member-login-sec" class="section active">
-        <h2>會員登入</h2>
-        <label>Email</label>
-        <input type="email" id="login-email" placeholder="example@email.com">
-        
-        <label>密碼</label>
-        <div class="pw-wrapper">
-            <input type="password" id="login-pw" placeholder="請輸入密碼">
-            <button type="button" class="toggle-btn" onclick="togglePw('login-pw')">顯示</button>
-        </div>
-
-        <div style="margin-top: 10px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-            <label style="margin: 0;"><input type="checkbox" id="remember-me"> 記住我</label>
-            <a onclick="switchSec('forgot-pw-sec')" style="color: #0066cc; cursor: pointer;">忘記密碼？</a>
-        </div>
-
-        <button type="button" class="primary-btn" onclick="loginMember()">登入</button>
-        
-        <div class="link-bar">
-            <a onclick="switchSec('req-reg-sec')">還沒有帳號？索取註冊碼</a> | 
-            <a onclick="switchSec('admin-login-sec')" style="color: #666;">Admin 登入</a>
-        </div>
-    </div>
-
-    <!-- 忘記密碼 -->
-    <div id="forgot-pw-sec" class="section">
-        <h2>重置密碼</h2>
-        <label>請輸入您的會員 Email</label>
-        <input type="email" id="forgot-email" placeholder="example@email.com">
-        
-        <button type="button" class="primary-btn" onclick="sendPasswordReset()">發送重置連結</button>
-        
-        <div class="notice-box">
-            💡 提示：如未收到郵件，請務必檢查「垃圾郵件箱（Spam）」。
-        </div>
-
-        <div class="link-bar">
-            <a onclick="switchSec('member-login-sec')">返回登入</a>
-        </div>
-    </div>
-
-    <!-- 索取驗證碼 -->
-    <div id="req-reg-sec" class="section">
-        <h2>索取註冊驗證碼</h2>
-        <label>Email</label>
-        <input type="email" id="req-email" placeholder="example@email.com">
-        
-        <button type="button" class="primary-btn" onclick="requestRegistration()">傳送驗證碼</button>
-        
-        <div class="notice-box">
-            💡 驗證碼發送後，若收件箱未收到，請檢查「垃圾郵件箱」。
-        </div>
-
-        <div class="link-bar">
-            <a onclick="switchSec('verify-reg-sec')">已有驗證碼？前往註冊</a> | 
-            <a onclick="switchSec('member-login-sec')">返回登入</a>
-        </div>
-    </div>
-
-    <!-- 驗證碼註冊 -->
-    <div id="verify-reg-sec" class="section">
-        <h2>驗證與註冊</h2>
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="example@email.com">
-
-        <label>驗證碼</label>
-        <input type="text" id="reg-code" placeholder="6 位數驗證碼">
-
-        <label>設定密碼</label>
-        <div class="pw-wrapper">
-            <input type="password" id="reg-pw" placeholder="設定密碼">
-            <button type="button" class="toggle-btn" onclick="togglePw('reg-pw')">顯示</button>
-        </div>
-
-        <label>確認密碼</label>
-        <div class="pw-wrapper">
-            <input type="password" id="reg-pw-confirm" placeholder="再次輸入密碼">
-            <button type="button" class="toggle-btn" onclick="togglePw('reg-pw-confirm')">顯示</button>
-        </div>
-
-        <button type="button" class="primary-btn" onclick="verifyAndRegister()">完成註冊</button>
-        
-        <div class="link-bar">
-            <a onclick="switchSec('member-login-sec')">返回登入</a>
-        </div>
-    </div>
-
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { 
-        getAuth, 
-        signInWithEmailAndPassword, 
-        createUserWithEmailAndPassword,
-        setPersistence,
-        browserLocalPersistence,
-        browserSessionPersistence,
-        sendPasswordResetEmail
-    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+    // Firebase 配置
     const firebaseConfig = {
         apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
         authDomain: "new-claim-dcc61.firebaseapp.com",
@@ -159,14 +120,34 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
 
+    // EmailJS 初始化
     emailjs.init("BPAFFubzN1MfkA89K");
 
-    // 切換極簡風格密碼顯示/隱藏
-    window.togglePw = (inputId) => {
+    let generatedCode = "";
+
+    // 頁籤切換
+    window.switchTab = (tab) => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.form-group').forEach(f => f.classList.remove('active'));
+        if (tab === 'member') {
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            document.getElementById('member-form').classList.add('active');
+        } else {
+            document.querySelectorAll('.tab')[1].classList.add('active');
+            document.getElementById('admin-form').classList.add('active');
+        }
+    };
+
+    // 切換註冊/登入介面
+    window.toggleRegisterView = (showRegister) => {
+        document.getElementById('login-box').style.display = showRegister ? 'none' : 'block';
+        document.getElementById('register-box').style.display = showRegister ? 'block' : 'none';
+    };
+
+    // 切換密碼顯示/隱藏
+    window.togglePassword = (inputId, btn) => {
         const input = document.getElementById(inputId);
-        const btn = input.nextElementSibling;
         if (input.type === 'password') {
             input.type = 'text';
             btn.innerText = '隱藏';
@@ -176,115 +157,71 @@
         }
     };
 
-    // 切換畫面
-    window.switchSec = (secId) => {
-        document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
-        const target = document.getElementById(secId);
-        if (target) target.classList.add('active');
+    // 發送 EmailJS 6位數驗證碼
+    window.sendVerificationCode = () => {
+        const email = document.getElementById('reg-email').value.trim().toLowerCase();
+        if (!email) return alert('請先輸入電郵地址');
+
+        generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        emailjs.send("service_tdgtjyj", "template_us7g79i", {
+            to_email: email,
+            verify_code: generatedCode
+        }).then(() => {
+            alert('驗證碼已發送至您的電郵！若未收到，請檢查垃圾郵件箱。');
+        }).catch(err => {
+            alert('驗證碼發送失敗：' + JSON.stringify(err));
+        });
     };
 
-    // Admin 登入 (強化防空白邏輯)
+    // 會員註冊邏輯
+    window.registerMember = async () => {
+        const email = document.getElementById('reg-email').value.trim().toLowerCase();
+        const code = document.getElementById('reg-code').value.trim();
+        const pw = document.getElementById('reg-pw').value.trim();
+
+        if (!email || !code || !pw) return alert('請填寫所有資料！');
+        if (code !== generatedCode) return alert('驗證碼不正確！');
+
+        try {
+            await createUserWithEmailAndPassword(auth, email, pw);
+            sessionStorage.setItem('role', 'member');
+            alert('註冊成功！');
+            window.location.href = 'dashboard.html';
+        } catch (e) {
+            alert('註冊失敗: ' + e.message);
+        }
+    };
+
+    // 會員登入邏輯
+    window.loginMember = async () => {
+        const email = document.getElementById('member-email').value.trim().toLowerCase();
+        const pw = document.getElementById('member-pw').value.trim();
+
+        if (!email || !pw) return alert('請填寫電郵與密碼！');
+
+        try {
+            await signInWithEmailAndPassword(auth, email, pw);
+            sessionStorage.setItem('role', 'member');
+            window.location.href = 'dashboard.html';
+        } catch (e) {
+            alert('登入失敗: ' + e.message);
+        }
+    };
+
+    // Admin 登入邏輯 (固定大寫 Admin / 61399638)
     window.loginAdmin = () => {
         const id = document.getElementById('admin-id').value.trim();
         const pw = document.getElementById('admin-pw').value.trim();
-        
-        if (id === 'admin' && pw === '61399638') {
+
+        if (id === 'Admin' && pw === '61399638') {
             sessionStorage.setItem('role', 'admin');
             window.location.href = 'dashboard.html';
         } else {
             alert('Admin 帳號或密碼錯誤！');
         }
     };
-
-    // 會員登入
-    window.loginMember = async () => {
-        const email = document.getElementById('login-email').value.trim().toLowerCase();
-        const pw = document.getElementById('login-pw').value.trim();
-        const rememberMe = document.getElementById('remember-me').checked;
-
-        if (!email || !pw) return alert('請填寫完整 Email 及密碼');
-
-        try {
-            const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-            await setPersistence(auth, persistenceType);
-            await signInWithEmailAndPassword(auth, email, pw);
-            sessionStorage.setItem('role', 'member');
-            window.location.href = 'dashboard.html';
-        } catch (e) { 
-            alert("登入失敗: " + e.message); 
-        }
-    };
-
-    // 忘記密碼（加上垃圾桶提示）
-    window.sendPasswordReset = async () => {
-        const email = document.getElementById('forgot-email').value.trim().toLowerCase();
-        if (!email) return alert('請輸入會員 Email');
-        
-        try {
-            await sendPasswordResetEmail(auth, email);
-            alert(`重置密碼郵件已發送至：${email}\n\n⚠️ 提示：若收件箱未看到郵件，請務必查看「垃圾郵件箱（Spam）」！`);
-            switchSec('member-login-sec');
-        } catch (e) { 
-            if (e.code === 'auth/user-not-found') {
-                alert('此 Email 尚未註冊會員！');
-            } else {
-                alert("發送失敗: " + e.message); 
-            }
-        }
-    };
-
-    // 申請註冊（加上垃圾桶提示）
-    window.requestRegistration = async () => {
-        const email = document.getElementById('req-email').value.trim().toLowerCase();
-        if(!email) return alert('請輸入 Email');
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        
-        try {
-            await setDoc(doc(db, "registration_codes", email), { code: code, used: false });
-            
-            await emailjs.send("service_tdgtjyj", "template_us7g79i", { 
-                to_email: email,
-                user_email: email, 
-                verification_code: code 
-            });
-            
-            alert(`驗證碼已發送至：${email}\n\n⚠️ 提示：若收件箱未看到郵件，請務必查看「垃圾郵件箱（Spam）」！`);
-            document.getElementById('reg-email').value = email;
-            switchSec('verify-reg-sec');
-        } catch(e) { 
-            alert("發送失敗: " + e.message); 
-        }
-    };
-
-    // 驗證碼註冊
-    window.verifyAndRegister = async () => {
-        const email = document.getElementById('reg-email').value.trim().toLowerCase();
-        const code = document.getElementById('reg-code').value.trim();
-        const pw = document.getElementById('reg-pw').value.trim();
-        const pwConfirm = document.getElementById('reg-pw-confirm').value.trim();
-
-        if (!email || !code || !pw) return alert('請填寫所有欄位！');
-        if (pw !== pwConfirm) return alert('兩次輸入的密碼不一致！');
-
-        try {
-            const docSnap = await getDoc(doc(db, "registration_codes", email));
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (String(data.code).trim() === String(code) && data.used === false) {
-                    await createUserWithEmailAndPassword(auth, email, pw);
-                    await updateDoc(doc(db, "registration_codes", email), { used: true });
-                    alert('註冊成功！請使用新密碼登入。');
-                    switchSec('member-login-sec');
-                } else {
-                    alert('驗證碼錯誤或已被使用！');
-                }
-            } else {
-                alert('找不到此 Email 的申請紀錄！');
-            }
-        } catch (e) { 
-            alert("註冊失敗: " + e.message); 
-        }
-    };
 </script>
+
 </body>
 </html>
