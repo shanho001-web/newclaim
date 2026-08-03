@@ -9,12 +9,16 @@
         .box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align: center; }
         .section { display: none; }
         .section.active { display: block; }
-        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; }
-        .link { color: #666; cursor: pointer; text-decoration: underline; font-size: 14px; margin-top: 10px; display: block; }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .pw-container { position: relative; width: 100%; }
+        .pw-container input { padding-right: 40px; }
+        .toggle-pw { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 14px; user-select: none; }
+        .remember-box { display: flex; align-items: center; justify-content: flex-start; margin: 5px 0 10px 0; font-size: 14px; }
+        .remember-box input { width: auto; margin-right: 8px; }
+        button { width: 100%; padding: 10px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; margin-top: 5px; }
+        .link { color: #666; cursor: pointer; text-decoration: underline; font-size: 14px; margin-top: 8px; display: block; }
         h2 { margin-top: 0; }
     </style>
-    <!-- 引入 EmailJS SDK -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 </head>
 <body>
@@ -24,7 +28,10 @@
     <div id="admin-sec" class="section active">
         <h2>Admin 登入</h2>
         <input type="text" id="admin-id" placeholder="Admin ID">
-        <input type="password" id="admin-pw" placeholder="Password">
+        <div class="pw-container">
+            <input type="password" id="admin-pw" placeholder="Password">
+            <span class="toggle-pw" onclick="togglePw('admin-pw')">👁️</span>
+        </div>
         <button onclick="loginAdmin()">確認</button>
         <span class="link" onclick="switchSec('member-login-sec')">轉入會員頁</span>
     </div>
@@ -33,28 +40,52 @@
     <div id="member-login-sec" class="section">
         <h2>會員登入</h2>
         <input type="email" id="login-email" placeholder="會員 Email">
-        <input type="password" id="login-pw" placeholder="密碼">
+        <div class="pw-container">
+            <input type="password" id="login-pw" placeholder="密碼">
+            <span class="toggle-pw" onclick="togglePw('login-pw')">👁️</span>
+        </div>
+        <div class="remember-box">
+            <input type="checkbox" id="remember-me">
+            <label for="remember-me">記住密碼</label>
+        </div>
         <button onclick="loginMember()">登入</button>
+        <span class="link" onclick="switchSec('forgot-pw-sec')">忘記密碼？</span>
         <span class="link" onclick="switchSec('request-reg-sec')">非會員？點此申請註冊</span>
         <span class="link" onclick="switchSec('admin-sec')">返回 Admin</span>
     </div>
 
-    <!-- 申請註冊區 (自動發送 EmailJS) -->
+    <!-- 忘記密碼區 -->
+    <div id="forgot-pw-sec" class="section">
+        <h2>忘記密碼</h2>
+        <p style="font-size: 12px; color: #666;">輸入註冊 Email，系統將發送重置密碼連結至您的信箱。</p>
+        <input type="email" id="forgot-email" placeholder="輸入您的 Email">
+        <button onclick="sendPasswordReset()">發送重置郵件</button>
+        <span class="link" onclick="switchSec('member-login-sec')">返回登入</span>
+    </div>
+
+    <!-- 申請註冊區 -->
     <div id="request-reg-sec" class="section">
         <h2>申請註冊</h2>
-        <p style="font-size: 12px; color: #666;">輸入 Email，系統將產生驗證碼並傳送給管理員 (shanho001@gmail.com)。管理員回覆後請前往驗證。</p>
+        <p style="font-size: 12px; color: #666;">輸入 Email，系統將傳送驗證碼給管理員。管理員回覆後請前往驗證。</p>
         <input type="email" id="req-email" placeholder="你的 Email">
         <button onclick="requestRegistration()">索取驗證碼</button>
         <span class="link" onclick="switchSec('verify-reg-sec')">已有驗證碼？前往驗證</span>
         <span class="link" onclick="switchSec('member-login-sec')">返回登入</span>
     </div>
 
-    <!-- 驗證並註冊區 -->
+    <!-- 驗證並註冊區 (二次確認密碼) -->
     <div id="verify-reg-sec" class="section">
         <h2>驗證與註冊</h2>
         <input type="email" id="reg-email" placeholder="輸入申請的 Email">
         <input type="text" id="reg-code" placeholder="輸入管理員給的 6 位驗證碼">
-        <input type="password" id="reg-pw" placeholder="自訂新密碼">
+        <div class="pw-container">
+            <input type="password" id="reg-pw" placeholder="自訂新密碼">
+            <span class="toggle-pw" onclick="togglePw('reg-pw')">👁️</span>
+        </div>
+        <div class="pw-container">
+            <input type="password" id="reg-pw-confirm" placeholder="再次確認密碼">
+            <span class="toggle-pw" onclick="togglePw('reg-pw-confirm')">👁️</span>
+        </div>
         <button onclick="verifyAndRegister()">確認註冊</button>
         <span class="link" onclick="switchSec('member-login-sec')">返回登入</span>
     </div>
@@ -62,10 +93,17 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+        getAuth, 
+        signInWithEmailAndPassword, 
+        createUserWithEmailAndPassword,
+        setPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence,
+        sendPasswordResetEmail
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // Firebase 設定
     const firebaseConfig = {
         apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
         authDomain: "new-claim-dcc61.firebaseapp.com",
@@ -80,76 +118,84 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // 初始化 EmailJS
     emailjs.init("BPAFFubzN1MfkA89K");
 
-    // 切換畫面顯示
+    // 顯示/隱藏密碼切換
+    window.togglePw = (inputId) => {
+        const input = document.getElementById(inputId);
+        input.type = input.type === 'password' ? 'text' : 'password';
+    };
+
+    // 切換畫面
     window.switchSec = (secId) => {
         document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
         document.getElementById(secId).classList.add('active');
     };
 
-    // 1. Admin 登入
+    // 1. Admin 登入 (改寫阻擋與儲存 State)
     window.loginAdmin = () => {
-        const id = document.getElementById('admin-id').value;
-        const pw = document.getElementById('admin-pw').value;
+        const id = document.getElementById('admin-id').value.trim();
+        const pw = document.getElementById('admin-pw').value.trim();
         if (id === 'admin' && pw === '61399638') {
-            sessionStorage.setItem('role', 'admin'); 
+            sessionStorage.setItem('role', 'admin');
             window.location.href = 'dashboard.html';
         } else {
             alert('Admin 帳號或密碼錯誤！');
         }
     };
 
-    // 2. 會員登入
+    // 2. 會員登入 (加入記住密碼邏輯)
     window.loginMember = async () => {
         const email = document.getElementById('login-email').value;
         const pw = document.getElementById('login-pw').value;
+        const rememberMe = document.getElementById('remember-me').checked;
+
         try {
+            // 根據記住密碼設定 Persistence
+            const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+            await setPersistence(auth, persistenceType);
+            
             await signInWithEmailAndPassword(auth, email, pw);
             sessionStorage.setItem('role', 'member');
             window.location.href = 'dashboard.html';
         } catch (e) { alert("登入失敗: " + e.message); }
     };
 
-    // 3. 申請註冊 (自動發送 Email)
+    // 3. 忘記密碼發送連結
+    window.sendPasswordReset = async () => {
+        const email = document.getElementById('forgot-email').value;
+        if (!email) return alert('請輸入 Email');
+        try {
+            await sendPasswordResetEmail(auth, email);
+            alert('密碼重置郵件已發送！請至您的信箱收取重置連結。');
+            switchSec('member-login-sec');
+        } catch (e) { alert("發送失敗: " + e.message); }
+    };
+
+    // 4. 申請註冊 (發送 EmailJS)
     window.requestRegistration = async () => {
         const email = document.getElementById('req-email').value;
         if(!email) return alert('請輸入 Email');
-        
-        // 隨機產生 6 位數驗證碼
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         
         try {
-            // 將驗證碼存入 Firestore
             await setDoc(doc(db, "registration_codes", email), { code: code, used: false });
-            
-            // 準備 EmailJS 的變數
-            const templateParams = {
-                user_email: email,
-                verification_code: code
-            };
-            
-            // 呼叫 EmailJS API 發送信件
-            await emailjs.send(
-                "service_tdgtjyj",
-                "template_us7g79i",
-                templateParams
-            );
-            
-            alert('已產生驗證碼並自動通知管理員！請等待管理員發送驗證碼給您。');
+            await emailjs.send("service_tdgtjyj", "template_us7g79i", { user_email: email, verification_code: code });
+            alert('已產生驗證碼並自動通知管理員！');
             switchSec('verify-reg-sec');
-        } catch(e) { 
-            console.error(e);
-            alert("申請通知發送失敗，請檢查 EmailJS 設定: " + e.message); 
-        }
+        } catch(e) { alert("發送失敗: " + e.message); }
     };
 
-    // 4. 驗證並註冊
+    // 5. 驗證與註冊 (檢查兩次密碼一致)
     window.verifyAndRegister = async () => {
         const email = document.getElementById('reg-email').value;
         const code = document.getElementById('reg-code').value;
         const pw = document.getElementById('reg-pw').value;
+        const pwConfirm = document.getElementById('reg-pw-confirm').value;
+
+        if (pw !== pwConfirm) {
+            return alert('兩次輸入的密碼不一致！請重新確認。');
+        }
 
         try {
             const docSnap = await getDoc(doc(db, "registration_codes", email));

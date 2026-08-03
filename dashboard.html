@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claim 單系統</title>
+    <title>Claim 單系統 - Dashboard</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #fff; }
         .container { max-width: 600px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
         input, select { width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box; }
         button { background: #000; color: #fff; padding: 10px; border: none; width: 100%; cursor: pointer; }
-        .order-card { border: 1px solid #eee; padding: 10px; margin-top: 10px; }
+        .order-card { border: 1px solid #eee; padding: 10px; margin-top: 10px; border-radius: 4px; }
         .order-card img { max-width: 150px; display: block; margin: 10px 0; }
-        a.dl-btn { background: #eee; padding: 5px; text-decoration: none; color: #000; font-size: 14px; border: 1px solid #ccc; }
+        a.dl-btn { background: #eee; padding: 5px 10px; text-decoration: none; color: #000; font-size: 14px; border: 1px solid #ccc; display: inline-block; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -27,7 +27,7 @@
     </select>
 
     <label>價錢 ($)</label>
-    <input type="number" id="price">
+    <input type="number" id="price" placeholder="輸入金額">
 
     <label>日期</label>
     <input type="date" id="date">
@@ -38,7 +38,7 @@
     <button onclick="submitClaim()">提交 Claim 單</button>
     <button onclick="logout()" style="background:#cc0000; margin-top:10px;">登出</button>
 
-    <hr>
+    <hr style="margin: 20px 0;">
     <h3>已提交紀錄</h3>
     <div id="record-list"></div>
 </div>
@@ -48,35 +48,36 @@
     import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-    // ⚠️ 替換成你的 Firebase 設定 (與 index.html 相同)
-    const firebaseConfig =  {
-  apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
-  authDomain: "new-claim-dcc61.firebaseapp.com",
-  projectId: "new-claim-dcc61",
-  storageBucket: "new-claim-dcc61.firebasestorage.app",
-  messagingSenderId: "589308572721",
-  appId: "1:589308572721:web:4da5c6d74711134f0dd110",
-  measurementId: "G-RBJV5E2VKL"
-};
-
+    const firebaseConfig = {
+        apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
+        authDomain: "new-claim-dcc61.firebaseapp.com",
+        projectId: "new-claim-dcc61",
+        storageBucket: "new-claim-dcc61.firebasestorage.app",
+        messagingSenderId: "589308572721",
+        appId: "1:589308572721:web:4da5c6d74711134f0dd110",
+        measurementId: "G-RBJV5E2VKL"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // 檢查登入狀態
+    // 檢查身分驗證
     const role = sessionStorage.getItem('role');
     if (!role) {
         alert("請先登入！");
         window.location.href = 'index.html';
+    } else {
+        document.getElementById('user-role').innerText = `(身分: ${role})`;
     }
-    document.getElementById('user-role').innerText = `(身分: ${role})`;
 
+    // 登出
     window.logout = () => {
         sessionStorage.removeItem('role');
         window.location.href = 'index.html';
     };
 
+    // 提交 Claim 單
     window.submitClaim = async () => {
         const cat = document.getElementById('category').value;
         const price = document.getElementById('price').value;
@@ -88,35 +89,46 @@
         try {
             let imgUrl = "";
             if (file) {
-                // 將圖片上傳到 Storage 的 claims 資料夾
                 const storageRef = ref(storage, 'claims/' + Date.now() + '_' + file.name);
                 await uploadBytes(storageRef, file);
                 imgUrl = await getDownloadURL(storageRef);
             }
 
-            // 存入 Firestore
             await addDoc(collection(db, "claims"), {
-                category: cat, price: price, date: date, imageUrl: imgUrl
+                category: cat, 
+                price: price, 
+                date: date, 
+                imageUrl: imgUrl,
+                createdAt: new Date().toISOString()
             });
+
             alert("提交成功！");
             location.reload();
-        } catch (e) { alert("錯誤: " + e.message); }
+        } catch (e) { 
+            alert("錯誤: " + e.message); 
+        }
     };
 
-    // 讀取紀錄
+    // 讀取歷史紀錄
     async function loadClaims() {
         const list = document.getElementById('record-list');
-        const snap = await getDocs(collection(db, "claims"));
-        snap.forEach(doc => {
-            const d = doc.data();
-            list.innerHTML += `
-                <div class="order-card">
-                    <p><strong>分類:</strong> ${d.category} | <strong>價錢:</strong> $${d.price} | <strong>日期:</strong> ${d.date}</p>
-                    ${d.imageUrl ? `<img src="${d.imageUrl}"><a href="${d.imageUrl}" class="dl-btn" target="_blank">下載圖片</a>` : ''}
-                </div>
-            `;
-        });
+        list.innerHTML = "";
+        try {
+            const snap = await getDocs(collection(db, "claims"));
+            snap.forEach(doc => {
+                const d = doc.data();
+                list.innerHTML += `
+                    <div class="order-card">
+                        <p><strong>分類:</strong> ${d.category} | <strong>價錢:</strong> $${d.price} | <strong>日期:</strong> ${d.date}</p>
+                        ${d.imageUrl ? `<img src="${d.imageUrl}"><a href="${d.imageUrl}" class="dl-btn" target="_blank">查看/下載圖片</a>` : ''}
+                    </div>
+                `;
+            });
+        } catch (e) {
+            console.error("載入紀錄失敗:", e);
+        }
     }
+
     loadClaims();
 </script>
 </body>
