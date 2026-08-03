@@ -157,22 +157,23 @@
         }
     };
 
-    // 發送 EmailJS 6位數驗證碼
-    window.sendVerificationCode = () => {
-        const email = document.getElementById('reg-email').value.trim().toLowerCase();
-        if (!email) return alert('請先輸入電郵地址');
+// 發送 EmailJS 6位數驗證碼
+window.sendVerificationCode = () => {
+    const email = document.getElementById('reg-email').value.trim().toLowerCase();
+    if (!email) return alert('請先輸入電郵地址');
 
-        generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+    generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-        emailjs.send("service_tdgtjyj", "template_us7g79i", {
-            to_email: email,
-            verify_code: generatedCode
-        }).then(() => {
-            alert('驗證碼已發送至您的電郵！若未收到，請檢查垃圾郵件箱。');
-        }).catch(err => {
-            alert('驗證碼發送失敗：' + JSON.stringify(err));
-        });
-    };
+    // 修正：將變數名稱與 EmailJS 範本中的 {{user_email}} 及 {{verification_code}} 對齊
+    emailjs.send("service_tdgtjyj", "template_us7g79i", {
+        user_email: email,            // 對應後台 {{user_email}}
+        verification_code: generatedCode // 對應後台 {{verification_code}}
+    }).then(() => {
+        alert('驗證碼已發送至您的電郵！若未收到，請檢查垃圾郵件箱。');
+    }).catch(err => {
+        alert('驗證碼發送失敗：' + JSON.stringify(err));
+    });
+};
 
     // 會員註冊邏輯
     window.registerMember = async () => {
