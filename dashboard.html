@@ -3,37 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系統儀表板</title>
+    <title>Claim 單系統 - Dashboard</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f9f9f9; color: #333; }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
-        h1 { margin: 0; font-size: 18px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f9f9f9; color: #333; margin: 0; }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+        header h1 { margin: 0; font-size: 18px; }
         .user-badge { font-size: 13px; color: #666; background: #f0f0f0; padding: 4px 8px; border-radius: 4px; margin-right: 10px; }
-        .logout-btn { background: #ff4d4f; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+        .logout-btn { background: #ff4d4f; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
         .logout-btn:hover { background: #d9363e; }
-        .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
-        .card { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 20px; }
+        
+        .container { max-width: 600px; margin: 0 auto; background: #fff; border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 14px; }
+        input, select { width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button.submit-btn { background: #000; color: #fff; padding: 12px; border: none; width: 100%; cursor: pointer; border-radius: 4px; font-size: 16px; font-weight: bold; }
+        button.submit-btn:hover { background: #222; }
+        
+        .order-card { border: 1px solid #eee; padding: 12px; margin-top: 10px; border-radius: 6px; background: #fafafa; }
+        .order-card img { max-width: 150px; display: block; margin: 10px 0; border-radius: 4px; }
+        a.dl-btn { background: #eee; padding: 6px 12px; text-decoration: none; color: #000; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; display: inline-block; margin-top: 5px; }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>系統儀表板</h1>
+    <h1>Claim 單提交系統</h1>
     <div>
-        <span id="role-display" class="user-badge">載入中...</span>
+        <span id="user-role" class="user-badge">載入中...</span>
         <button class="logout-btn" onclick="logout()">登出</button>
     </div>
 </header>
 
 <div class="container">
-    <div class="card">
-        <h2>歡迎使用索償系統</h2>
-        <p id="welcome-msg">已成功進入系統後台。</p>
-    </div>
+    <h2>提交 Claim 單</h2>
+    
+    <label>分類</label>
+    <select id="category">
+        <option value="交通費">交通費</option>
+        <option value="餐飲費">餐飲費</option>
+        <option value="雜項">雜項</option>
+    </select>
+
+    <label>價錢 ($)</label>
+    <input type="number" id="price" placeholder="輸入金額">
+
+    <label>日期</label>
+    <input type="date" id="date">
+
+    <label>上載單據 (圖片)</label>
+    <input type="file" id="image" accept="image/*">
+
+    <button class="submit-btn" onclick="submitClaim()">提交 Claim 單</button>
+
+    <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+    <h3>已提交紀錄</h3>
+    <div id="record-list">載入紀錄中...</div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
     import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -47,23 +76,24 @@
     };
 
     const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
     const auth = getAuth(app);
 
-    // 頁面載入時檢查登入權限
+    // 檢查身分與權限
     const role = sessionStorage.getItem('role');
-    const roleDisplay = document.getElementById('role-display');
+    const roleDisplay = document.getElementById('user-role');
 
     if (!role) {
-        alert('請先登入！');
+        alert("請先登入！");
         window.location.href = 'index.html';
     } else {
         if (role === 'admin') {
-            roleDisplay.innerText = '身份：管理員 (Admin)';
+            roleDisplay.innerText = '身分: 管理員 (Admin)';
         } else {
-            // 會員身份，確認 Firebase Auth 狀態
             onAuthStateChanged(auth, (user) => {
                 if (user) {
-                    roleDisplay.innerText = `會員：${user.email}`;
+                    roleDisplay.innerText = `會員: ${user.email}`;
                 } else if (role !== 'admin') {
                     alert('登入狀態已失效，請重新登入');
                     window.location.href = 'index.html';
@@ -83,6 +113,65 @@
             alert('登出失敗: ' + e.message);
         }
     };
+
+    // 提交 Claim 單
+    window.submitClaim = async () => {
+        const cat = document.getElementById('category').value;
+        const price = document.getElementById('price').value;
+        const date = document.getElementById('date').value;
+        const file = document.getElementById('image').files[0];
+
+        if (!price || !date) return alert('請填寫價錢與日期');
+
+        try {
+            let imgUrl = "";
+            if (file) {
+                const storageRef = ref(storage, 'claims/' + Date.now() + '_' + file.name);
+                await uploadBytes(storageRef, file);
+                imgUrl = await getDownloadURL(storageRef);
+            }
+
+            await addDoc(collection(db, "claims"), {
+                category: cat,
+                price: price,
+                date: date,
+                imageUrl: imgUrl,
+                createdAt: new Date().toISOString()
+            });
+
+            alert("提交成功！");
+            location.reload();
+        } catch (e) {
+            alert("錯誤: " + e.message);
+        }
+    };
+
+    // 讀取歷史紀錄
+    async function loadClaims() {
+        const list = document.getElementById('record-list');
+        list.innerHTML = "";
+        try {
+            const snap = await getDocs(collection(db, "claims"));
+            if (snap.empty) {
+                list.innerHTML = "<p style='color:#888; font-size:14px;'>暫無提交紀錄</p>";
+                return;
+            }
+            snap.forEach(doc => {
+                const d = doc.data();
+                list.innerHTML += `
+                    <div class="order-card">
+                        <p style="margin:0;"><strong>分類:</strong> ${d.category} | <strong>價錢:</strong> $${d.price} | <strong>日期:</strong> ${d.date}</p>
+                        ${d.imageUrl ? `<img src="${d.imageUrl}"><a href="${d.imageUrl}" class="dl-btn" target="_blank">查看/下載圖片</a>` : ''}
+                    </div>
+                `;
+            });
+        } catch (e) {
+            console.error("載入紀錄失敗:", e);
+            list.innerHTML = "<p style='color:red;'>載入紀錄失敗</p>";
+        }
+    }
+
+    loadClaims();
 </script>
 
 </body>
