@@ -78,7 +78,7 @@
   <label>分類：</label>
   <input list="catList" id="catInput" placeholder="請選擇或自行輸入...">
   <datalist id="catList">
-    <option value="紙巾"><option value="紙杯"><option value="生日"><option value="衣紙"><option value="油"><option value="蠟燭"><option value="香品"><option value="資金補充"><option value="其他收入">
+    <option value="纸巾"><option value="纸杯"><option value="生日"><option value="衣纸"><option value="油"><option value="蠟燭"><option value="香品"><option value="資金補充"><option value="其他收入">
   </datalist>
 
   <label>金額 (HKD)：</label>
@@ -288,7 +288,7 @@
     }
   }
 
-  // 自動計算收支與累計餘額 Excel 下載
+  // 精確導出 Excel 包含收入、支出與結餘
   async function exportToExcel() {
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
@@ -308,11 +308,11 @@
       return;
     }
 
-    // 依日期升序排序以計算正確的流水號餘額
+    // 依日期升序排序以計算正確的流水結餘
     const records = [];
     snap.forEach(doc => records.push(doc.data()));
-    records.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
+    records.sort((a, b) => new Date(a.date) - new Date(a.date));
+
     const rows = [
       ["日期", "類型", "分類", "收入 (HKD)", "支出 (HKD)", "結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
     ];
@@ -320,7 +320,8 @@
     let currentBalance = 0;
 
     records.forEach(d => {
-      const isIncome = d.type === 'in';
+      // 若無 type 屬性則預設為支出 ('out')
+      const isIncome = (d.type === 'in');
       const amt = Number(d.price) || 0;
       const incomeAmt = isIncome ? amt : 0;
       const expenseAmt = !isIncome ? amt : 0;
@@ -339,15 +340,15 @@
       ]);
     });
 
-    // 加入總計行
-    const totalRowIndex = rows.length + 1;
+    // 加入 Excel 自動加總行
+    const lastRowIndex = rows.length; // 目前數據最後一行行號
     rows.push([
       "總計", 
       "-", 
       "-", 
-      `=SUM(D2:D${totalRowIndex-1})`, 
-      `=SUM(E2:E${totalRowIndex-1})`, 
-      `=D${totalRowIndex}-E${totalRowIndex}`, 
+      `=SUM(D2:D${lastRowIndex})`, 
+      `=SUM(E2:E${lastRowIndex})`, 
+      `=D${lastRowIndex+1}-E${lastRowIndex+1}`, 
       "-", 
       "-"
     ]);
