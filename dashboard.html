@@ -11,6 +11,9 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
   <!-- Excel Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- JSZip & FileSaver (用於批次打包 ZIP) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
   <style>
     body { font-family: sans-serif; background: #f4f6f8; padding: 20px; }
@@ -21,6 +24,7 @@
     .btn-del { color: red; font-weight: bold; }
     .header-bar { display: flex; justify-content: space-between; align-items: center; }
     .logout-btn { width: auto; background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .export-btn-group { display: flex; gap: 10px; }
   </style>
 </head>
 <body>
@@ -50,12 +54,16 @@
   <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交單據</button>
 
   <hr>
-  <h3>Excel 下載</h3>
+  <h3>報表與圖片批次下載</h3>
   <label>開始日期：</label>
   <input type="date" id="startD">
   <label>結束日期：</label>
   <input type="date" id="endD">
-  <button onclick="exportToExcel()" style="background:#28a745; color:white; font-weight:bold;">下載 Excel 表格</button>
+  
+  <div class="export-btn-group">
+    <button onclick="exportToExcel()" style="background:#28a745; color:white; font-weight:bold;">下載 Excel 表格</button>
+    <button onclick="exportImagesZip()" id="zipBtn" style="background:#17a2b8; color:white; font-weight:bold;">下載圖片 ZIP 包</button>
+  </div>
 
   <h3>歷史紀錄</h3>
   <div id="list">讀取中...</div>
@@ -159,7 +167,7 @@
     el.style.display = (el.style.display === 'block') ? 'none' : 'block';
   }
 
-  // 強制觸發圖片下載
+  // 強制觸發單張圖片下載
   async function downloadImg(url, fileName) {
     try {
       const response = await fetch(url);
@@ -209,7 +217,6 @@
       return;
     }
     
-    // 構建二維陣列（標頭 + 資料列）
     const rows = [
       ["購買日期", "分類", "金額 (HKD)", "圖片檔名", "點擊查看圖片"]
     ];
@@ -225,10 +232,8 @@
       ]);
     });
 
-    // 建立 Worksheet
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // 為圖片 URL 欄位加上 Excel 超連結格式
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = 1; R <= range.e.r; ++R) {
       const cellRef = XLSX.utils.encode_cell({ r: R, c: 4 });
@@ -242,21 +247,81 @@
       }
     }
 
-    // 設定欄寬
     ws['!cols'] = [
-      { wch: 15 }, // 日期
-      { wch: 15 }, // 分類
-      { wch: 15 }, // 金額
-      { wch: 30 }, // 檔名
-      { wch: 20 }  // 圖片超連結
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 30 },
+      { wch: 20 }
     ];
 
-    // 建立 Workbook 並匯出為 XLSX
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "報帳紀錄");
     
-    // 使用 binary 寫入以確保 UTF-8 相容性
     XLSX.writeFile(wb, `Claim_Report_${s}_to_${e}.xlsx`, { bookType: 'xlsx', type: 'binary' });
+  }
+
+  // 新增：下載指定日期範圍內所有圖片的 ZIP 壓縮包
+  async function exportImagesZip() {
+    const s = document.getElementById('startD').value;
+    const e = document.getElementById('endD').value;
+    const zipBtn = document.getElementById('zipBtn');
+    
+    if(!s || !e) {
+      alert("請選擇開始與結束日期！");
+      return;
+    }
+
+    zipBtn.innerText = "搜尋單據中...";
+    zipBtn.disabled = true;
+
+    try {
+      const snap = await db.collection('claims')
+        .where("date", ">=", s)
+        .where("date", "<=", e)
+        .get();
+        
+      if(snap.empty) {
+        alert("該範圍內無單據資料！");
+        zipBtn.innerText = "下載圖片 ZIP 包";
+        zipBtn.disabled = false;
+        return;
+      }
+
+      const zip = new JSZip();
+      let completedCount = 0;
+      const totalCount = snap.docs.length;
+
+      zipBtn.innerText = `準備下載圖片 (0/${totalCount})...`;
+
+      // 逐一抓取圖片數據並放入 ZIP 包中
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.url && d.name) {
+          try {
+            const resp = await fetch(d.url);
+            const blob = await resp.blob();
+            zip.file(d.name, blob);
+          } catch (err) {
+            console.error("圖片抓取失敗：", d.name, err);
+          }
+        }
+        completedCount++;
+        zipBtn.innerText = `打包進度 (${completedCount}/${totalCount})...`;
+      }
+
+      zipBtn.innerText = "壓縮包生成中...";
+      
+      // 生成並發送下載
+      const zipContent = await zip.generateAsync({ type: "blob" });
+      saveAs(zipContent, `Receipt_Images_${s}_to_${e}.zip`);
+
+    } catch (err) {
+      alert("打包過程發生錯誤：" + err.message);
+    } finally {
+      zipBtn.innerText = "下載圖片 ZIP 包";
+      zipBtn.disabled = false;
+    }
   }
 </script>
 </body>
