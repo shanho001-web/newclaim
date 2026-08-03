@@ -72,13 +72,16 @@
     <option value="in">收入 (入數/存入)</option>
   </select>
 
+  <label>填寫人姓名：</label>
+  <input type="text" id="userInput" placeholder="請輸入填寫人姓名">
+
   <label>日期：</label>
   <input type="date" id="dateInput">
 
   <label>分類：</label>
   <input list="catList" id="catInput" placeholder="請選擇或自行輸入...">
   <datalist id="catList">
-    <option value="纸巾"><option value="纸杯"><option value="生日"><option value="衣纸"><option value="油"><option value="蠟燭"><option value="香品"><option value="資金補充"><option value="其他收入">
+    <option value="紙巾"><option value="紙杯"><option value="生日"><option value="衣紙"><option value="油"><option value="蠟燭"><option value="香品"><option value="資金補充"><option value="其他收入">
   </datalist>
 
   <label>金額 (HKD)：</label>
@@ -149,13 +152,14 @@
   // 提交單據與自動命名
   async function submitClaim() {
     const type = document.getElementById('typeInput').value;
+    const userName = document.getElementById('userInput').value.trim();
     const d = document.getElementById('dateInput').value;
     const c = document.getElementById('catInput').value;
     const p = document.getElementById('priceInput').value;
     const f = document.getElementById('fileInput').files[0];
 
-    if(!d || !c || !p) {
-      alert("請填寫日期、分類與金額！");
+    if(!d || !c || !p || !userName) {
+      alert("請填寫人名、日期、分類與金額！");
       return;
     }
 
@@ -188,6 +192,7 @@
     try {
       await db.collection('claims').add({ 
         type: type, // 'in' 或 'out'
+        userName: userName, // 人名
         date: d, 
         category: c, 
         price: Number(p), 
@@ -220,6 +225,7 @@
     docsArr.forEach(d => {
       const isIncome = d.type === 'in';
       const amt = Number(d.price) || 0;
+      const nameStr = d.userName ? ` | <strong>經辦人：</strong> ${d.userName}` : '';
 
       if (isIncome) {
         totalIn += amt;
@@ -231,7 +237,7 @@
         <div class="card">
           <p>
             <span class="badge ${isIncome ? 'badge-in' : 'badge-out'}">${isIncome ? '收入' : '支出'}</span>
-            <strong>日期：</strong> ${d.date} | 
+            <strong>日期：</strong> ${d.date}${nameStr} | 
             <strong>分類：</strong> ${d.category} | 
             <strong>金額：</strong> <span style="color:${isIncome ? '#28a745' : '#dc3545'}; font-weight:bold;">${isIncome ? '+' : '-'}$${amt}</span>
           </p>
@@ -288,7 +294,7 @@
     }
   }
 
-  // 精確導出 Excel 包含收入、支出與結餘
+  // 精確導出 Excel 包含人名、收入、支出與結餘
   async function exportToExcel() {
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
@@ -311,16 +317,15 @@
     // 依日期升序排序以計算正確的流水結餘
     const records = [];
     snap.forEach(doc => records.push(doc.data()));
-    records.sort((a, b) => new Date(a.date) - new Date(a.date));
+    records.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     const rows = [
-      ["日期", "類型", "分類", "收入 (HKD)", "支出 (HKD)", "結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
+      ["日期", "經辦人", "類型", "分類", "收入 (HKD)", "支出 (HKD)", "結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
     ];
 
     let currentBalance = 0;
 
     records.forEach(d => {
-      // 若無 type 屬性則預設為支出 ('out')
       const isIncome = (d.type === 'in');
       const amt = Number(d.price) || 0;
       const incomeAmt = isIncome ? amt : 0;
@@ -330,6 +335,7 @@
 
       rows.push([
         d.date || "",
+        d.userName || "-",
         isIncome ? "收入" : "支出",
         d.category || "",
         incomeAmt,
@@ -344,11 +350,12 @@
     const lastRowIndex = rows.length; // 目前數據最後一行行號
     rows.push([
       "總計", 
+      "-",
       "-", 
       "-", 
-      `=SUM(D2:D${lastRowIndex})`, 
       `=SUM(E2:E${lastRowIndex})`, 
-      `=D${lastRowIndex+1}-E${lastRowIndex+1}`, 
+      `=SUM(F2:F${lastRowIndex})`, 
+      `=E${lastRowIndex+1}-F${lastRowIndex+1}`, 
       "-", 
       "-"
     ]);
@@ -358,7 +365,7 @@
     // 設定超連結
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = 1; R <= range.e.r - 1; ++R) {
-      const cellRef = XLSX.utils.encode_cell({ r: R, c: 7 });
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: 8 });
       if (ws[cellRef] && ws[cellRef].v) {
         const url = ws[cellRef].v;
         ws[cellRef] = {
@@ -372,6 +379,7 @@
     // 設定欄寬
     ws['!cols'] = [
       { wch: 12 }, // 日期
+      { wch: 12 }, // 經辦人
       { wch: 8 },  // 類型
       { wch: 15 }, // 分類
       { wch: 14 }, // 收入
