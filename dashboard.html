@@ -159,7 +159,7 @@
     el.style.display = (el.style.display === 'block') ? 'none' : 'block';
   }
 
-  // 強制觸發圖片下載（解決跨域與 404 問題）
+  // 強制觸發圖片下載
   async function downloadImg(url, fileName) {
     try {
       const response = await fetch(url);
@@ -174,7 +174,6 @@
       document.body.removeChild(a);
       window.URL.revokeObjectURL(blobUrl);
     } catch (e) {
-      // 若 Blob 下載被阻擋，以新頁面開啟原連結備用
       window.open(url, '_blank');
     }
   }
@@ -190,7 +189,7 @@
     }
   }
 
-  // Excel 下載 (日期篩選)
+  // 優化後的 Excel 下載 (排列整齊 + 圖片連結)
   async function exportToExcel() {
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
@@ -205,17 +204,39 @@
       .where("date", "<=", e)
       .get();
       
-    const data = [];
-    snap.forEach(d => data.push(d.data()));
-    
-    if(data.length === 0) {
+    if(snap.empty) {
       alert("該範圍內無資料！");
       return;
     }
     
+    // 重新排版資料：指定漂亮的中文標題列與資料順序
+    const formattedData = [];
+    snap.forEach(doc => {
+      const item = doc.data();
+      formattedData.push({
+        "購買日期": item.date || "",
+        "分類": item.category || "",
+        "金額 (HKD)": item.price || 0,
+        "圖片檔名": item.name || "",
+        "收據圖片連結": item.url || ""
+      });
+    });
+    
+    // 建立工作表
+    const ws = XLSX.utils.json_to_sheet(formattedData);
+    
+    // 設定欄寬（讓內容不擠在一起）
+    ws['!cols'] = [
+      { wch: 12 }, // 購買日期
+      { wch: 12 }, // 分類
+      { wch: 12 }, // 金額 (HKD)
+      { wch: 25 }, // 圖片檔名
+      { wch: 50 }  // 收據圖片連結
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Claims");
-    XLSX.writeFile(wb, `Export_${s}_to_${e}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "報帳紀錄");
+    XLSX.writeFile(wb, `Claim_Report_${s}_to_${e}.xlsx`);
   }
 </script>
 </body>
