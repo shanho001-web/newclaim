@@ -24,13 +24,17 @@
         button:hover { background: #005bb5; }
         .sub-btn { background: #34c759; }
         .sub-btn:hover { background: #28a745; }
-        .switch-link { text-align: center; margin-top: 12px; font-size: 14px; color: #007aff; cursor: pointer; }
+        .switch-link { text-align: center; margin-top: 15px; font-size: 14px; color: #007aff; cursor: pointer; }
         .forgot-pw-link { text-align: right; margin-top: 6px; font-size: 13px; color: #888; cursor: pointer; }
         .forgot-pw-link:hover { color: #007aff; text-decoration: underline; }
         .hint { font-size: 12px; color: #e67e22; margin-top: 4px; }
     </style>
     <!-- EmailJS SDK -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <!-- Firebase SDK (v8) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
@@ -40,9 +44,9 @@
         <div class="tab" onclick="switchTab('admin')">管理員登入</div>
     </div>
 
-    <!-- 1. 會員登入 / 註冊表單 -->
+    <!-- 1. 會員專區 -->
     <div id="member-form" class="form-group active">
-        <!-- 登入模式 -->
+        <!-- 會員登入 -->
         <div id="login-box">
             <h2>會員登入</h2>
             <div class="input-group">
@@ -61,9 +65,13 @@
             <div class="switch-link" onclick="toggleRegisterView(true)">未有帳號？按此註冊</div>
         </div>
 
-        <!-- 註冊模式 -->
+        <!-- 會員註冊 (含姓名) -->
         <div id="register-box" style="display: none;">
             <h2>會員註冊</h2>
+            <div class="input-group">
+                <label>真實姓名</label>
+                <input type="text" id="reg-name" placeholder="請輸入您的真實姓名">
+            </div>
             <div class="input-group">
                 <label>電郵地址</label>
                 <div class="code-group">
@@ -88,7 +96,7 @@
         </div>
     </div>
 
-    <!-- 2. 管理員登入表單 -->
+    <!-- 2. 管理員登入 -->
     <div id="admin-form" class="form-group">
         <h2>管理員登入</h2>
         <div class="input-group">
@@ -106,11 +114,7 @@
     </div>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-
-    // Firebase 配置
+<script>
     const firebaseConfig = {
         apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
         authDomain: "new-claim-dcc61.firebaseapp.com",
@@ -121,16 +125,14 @@
         measurementId: "G-RBJV5E2VKL"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-    // EmailJS 初始化
     emailjs.init("BPAFFubzN1MfkA89K");
-
     let generatedCode = "";
 
-    // 頁籤切換
-    window.switchTab = (tab) => {
+    function switchTab(tab) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.form-group').forEach(f => f.classList.remove('active'));
         if (tab === 'member') {
@@ -140,16 +142,14 @@
             document.querySelectorAll('.tab')[1].classList.add('active');
             document.getElementById('admin-form').classList.add('active');
         }
-    };
+    }
 
-    // 切換註冊/登入介面
-    window.toggleRegisterView = (showRegister) => {
+    function toggleRegisterView(showRegister) {
         document.getElementById('login-box').style.display = showRegister ? 'none' : 'block';
         document.getElementById('register-box').style.display = showRegister ? 'block' : 'none';
-    };
+    }
 
-    // 切換密碼顯示/隱藏
-    window.togglePassword = (inputId, btn) => {
+    function togglePassword(inputId, btn) {
         const input = document.getElementById(inputId);
         if (input.type === 'password') {
             input.type = 'text';
@@ -158,15 +158,13 @@
             input.type = 'password';
             btn.innerText = '顯示';
         }
-    };
+    }
 
-    // 發送 EmailJS 6位數驗證碼
-    window.sendVerificationCode = () => {
+    function sendVerificationCode() {
         const email = document.getElementById('reg-email').value.trim().toLowerCase();
         if (!email) return alert('請先輸入電郵地址');
 
         generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-
         emailjs.send("service_tdgtjyj", "template_us7g79i", {
             user_email: email,
             verification_code: generatedCode
@@ -175,72 +173,85 @@
         }).catch(err => {
             alert('驗證碼發送失敗：' + JSON.stringify(err));
         });
-    };
+    }
 
-    // 忘記密碼邏輯 (Firebase 重設密碼郵件)
-    window.resetPassword = async () => {
+    async function resetPassword() {
         const email = document.getElementById('member-email').value.trim().toLowerCase();
-        if (!email) {
-            alert('請先在「電郵地址」欄位輸入您的 Email，再按忘記密碼。');
-            return;
-        }
+        if (!email) return alert('請先在「電郵地址」欄位輸入 Email');
 
         try {
-            await sendPasswordResetEmail(auth, email);
-            alert('重設密碼郵件已發送至：' + email + '\n請至信箱點擊連結設定新密碼！');
+            await auth.sendPasswordResetEmail(email);
+            alert('重設密碼郵件已發送至：' + email);
         } catch (e) {
             alert('發送失敗：' + e.message);
         }
-    };
+    }
 
-    // 會員註冊邏輯
-    window.registerMember = async () => {
+    async function registerMember() {
+        const name = document.getElementById('reg-name').value.trim();
         const email = document.getElementById('reg-email').value.trim().toLowerCase();
         const code = document.getElementById('reg-code').value.trim();
         const pw = document.getElementById('reg-pw').value.trim();
 
-        if (!email || !code || !pw) return alert('請填寫所有資料！');
+        if (!name || !email || !code || !pw) return alert('請填寫所有資料（包含真實姓名）！');
         if (code !== generatedCode) return alert('驗證碼不正確！');
 
         try {
-            await createUserWithEmailAndPassword(auth, email, pw);
+            await auth.createUserWithEmailAndPassword(email, pw);
+            await db.collection('users').doc(email).set({
+                email: email,
+                userName: name,
+                role: 'member',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
             sessionStorage.setItem('role', 'member');
+            sessionStorage.setItem('username', name);
+            sessionStorage.setItem('userEmail', email);
+
             alert('註冊成功！');
             window.location.href = 'dashboard.html';
         } catch (e) {
             alert('註冊失敗: ' + e.message);
         }
-    };
+    }
 
-    // 會員登入邏輯
-    window.loginMember = async () => {
+    async function loginMember() {
         const email = document.getElementById('member-email').value.trim().toLowerCase();
         const pw = document.getElementById('member-pw').value.trim();
 
         if (!email || !pw) return alert('請填寫電郵與密碼！');
 
         try {
-            await signInWithEmailAndPassword(auth, email, pw);
+            await auth.signInWithEmailAndPassword(email, pw);
+            const userDoc = await db.collection('users').doc(email).get();
+            let userName = email;
+            if (userDoc.exists && userDoc.data().userName) {
+                userName = userDoc.data().userName;
+            }
+
             sessionStorage.setItem('role', 'member');
+            sessionStorage.setItem('username', userName);
+            sessionStorage.setItem('userEmail', email);
+
             window.location.href = 'dashboard.html';
         } catch (e) {
             alert('登入失敗: ' + e.message);
         }
-    };
+    }
 
-    // Admin 登入邏輯
-    window.loginAdmin = () => {
+    function loginAdmin() {
         const id = document.getElementById('admin-id').value.trim();
         const pw = document.getElementById('admin-pw').value.trim();
 
         if (id === 'Admin' && pw === '61399638') {
             sessionStorage.setItem('role', 'admin');
+            sessionStorage.setItem('username', 'Admin');
             window.location.href = 'dashboard.html';
         } else {
             alert('Admin 帳號或密碼錯誤！');
         }
-    };
+    }
 </script>
-
 </body>
 </html>
