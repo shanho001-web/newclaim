@@ -17,41 +17,77 @@
 
   <style>
     body { font-family: sans-serif; background: #f4f6f8; padding: 20px; }
-    .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    input, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    .container { max-width: 650px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     .card { border: 1px solid #ddd; padding: 15px; margin-top: 15px; background: #fff; border-radius: 4px; }
     .btn-group { display: flex; gap: 5px; margin-top: 10px; }
     .btn-del { color: red; font-weight: bold; }
     .header-bar { display: flex; justify-content: space-between; align-items: center; }
     .logout-btn { width: auto; background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
     .export-btn-group { display: flex; gap: 10px; }
+    
+    /* 統計面板樣式 */
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 15px 0; }
+    .summary-box { padding: 12px; border-radius: 6px; text-align: center; color: white; font-weight: bold; }
+    .bg-in { background-color: #28a745; }
+    .bg-out { background-color: #dc3545; }
+    .bg-bal { background-color: #007bff; }
+    .summary-box span { display: block; font-size: 12px; font-weight: normal; margin-bottom: 4px; }
+    .summary-box div { font-size: 18px; }
+
+    /* 交易標籤 */
+    .badge { padding: 3px 8px; border-radius: 4px; color: white; font-size: 12px; font-weight: bold; display: inline-block; }
+    .badge-in { background: #28a745; }
+    .badge-out { background: #dc3545; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <div class="header-bar">
-    <h2>報帳系統 (完全版)</h2>
+    <h2>收支與報帳系統</h2>
     <button class="logout-btn" onclick="logout()">登出</button>
+  </div>
+
+  <!-- 財務總覽 -->
+  <div class="summary-grid">
+    <div class="summary-box bg-in">
+      <span>總收入</span>
+      <div id="stat-in">$0</div>
+    </div>
+    <div class="summary-box bg-out">
+      <span>總支出</span>
+      <div id="stat-out">$0</div>
+    </div>
+    <div class="summary-box bg-bal">
+      <span>當前結餘</span>
+      <div id="stat-bal">$0</div>
+    </div>
   </div>
   
   <!-- 欄位輸入區 -->
-  <label>購買日期：</label>
+  <label>交易類型：</label>
+  <select id="typeInput" onchange="toggleTypeUI()">
+    <option value="out">支出 (報帳/記帳)</option>
+    <option value="in">收入 (入數/存入)</option>
+  </select>
+
+  <label>日期：</label>
   <input type="date" id="dateInput">
 
   <label>分類：</label>
   <input list="catList" id="catInput" placeholder="請選擇或自行輸入...">
   <datalist id="catList">
-    <option value="纸巾"><option value="纸杯"><option value="生日"><option value="衣纸"><option value="油"><option value="蠟燭"><option value="香品">
+    <option value="紙巾"><option value="紙杯"><option value="生日"><option value="衣紙"><option value="油"><option value="蠟燭"><option value="香品"><option value="資金補充"><option value="其他收入">
   </datalist>
 
-  <label>價錢 (HKD)：</label>
+  <label>金額 (HKD)：</label>
   <input type="number" id="priceInput" placeholder="輸入金額">
 
-  <label>上載收據圖片：</label>
+  <label id="fileLabel">上載收據圖片：</label>
   <input type="file" id="fileInput">
 
-  <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交單據</button>
+  <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交紀錄</button>
 
   <hr>
   <h3>報表與圖片批次下載</h3>
@@ -100,66 +136,118 @@
   const db = firebase.firestore();
   const storage = firebase.storage();
 
+  function toggleTypeUI() {
+    const type = document.getElementById('typeInput').value;
+    const fileLabel = document.getElementById('fileLabel');
+    if (type === 'in') {
+      fileLabel.innerText = "上載入數紙/證明圖片 (可選)：";
+    } else {
+      fileLabel.innerText = "上載收據圖片：";
+    }
+  }
+
   // 提交單據與自動命名
   async function submitClaim() {
+    const type = document.getElementById('typeInput').value;
     const d = document.getElementById('dateInput').value;
     const c = document.getElementById('catInput').value;
     const p = document.getElementById('priceInput').value;
     const f = document.getElementById('fileInput').files[0];
 
-    if(!d || !c || !p || !f) {
-      alert("請填寫完整資訊！");
+    if(!d || !c || !p) {
+      alert("請填寫日期、分類與金額！");
+      return;
+    }
+
+    if(type === 'out' && !f) {
+      alert("支出記錄請提供收據圖片！");
       return;
     }
     
-    document.getElementById('subBtn').innerText = "上傳中，請稍候...";
+    document.getElementById('subBtn').innerText = "處理中，請稍候...";
     
-    // 檔名格式：YYMMDD分類價錢.副檔名
-    const dateObj = new Date(d);
-    const fileName = `${String(dateObj.getFullYear()).slice(-2)}${String(dateObj.getMonth()+1).padStart(2,'0')}${String(dateObj.getDate()).padStart(2,'0')}${c}${p}.${f.name.split('.').pop()}`;
+    let url = "";
+    let fileName = "";
+
+    if (f) {
+      const dateObj = new Date(d);
+      const prefix = type === 'in' ? '入數' : c;
+      fileName = `${String(dateObj.getFullYear()).slice(-2)}${String(dateObj.getMonth()+1).padStart(2,'0')}${String(dateObj.getDate()).padStart(2,'0')}${prefix}${p}.${f.name.split('.').pop()}`;
+      
+      try {
+        const ref = storage.ref('claims/' + fileName);
+        await ref.put(f);
+        url = await ref.getDownloadURL();
+      } catch (err) {
+        alert("圖片上傳失敗: " + err.message);
+        document.getElementById('subBtn').innerText = "提交紀錄";
+        return;
+      }
+    }
     
     try {
-      const ref = storage.ref('claims/' + fileName);
-      await ref.put(f);
-      const url = await ref.getDownloadURL();
-      
       await db.collection('claims').add({ 
+        type: type, // 'in' 或 'out'
         date: d, 
         category: c, 
         price: Number(p), 
         url: url, 
-        name: fileName 
+        name: fileName,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       
-      alert("單據提交成功！");
+      alert("紀錄提交成功！");
       location.reload();
     } catch (err) {
-      alert("上傳失敗: " + err.message);
-      document.getElementById('subBtn').innerText = "提交單據";
+      alert("提交失敗: " + err.message);
+      document.getElementById('subBtn').innerText = "提交紀錄";
     }
   }
 
-  // 渲染歷史紀錄
+  // 渲染歷史紀錄與統計計算
   db.collection('claims').onSnapshot(snap => {
     const list = document.getElementById('list');
     list.innerHTML = '';
     
-    snap.forEach(doc => {
-      const d = doc.data();
-      const id = doc.id;
+    let totalIn = 0;
+    let totalOut = 0;
+
+    // 將資料依日期排序
+    const docsArr = [];
+    snap.forEach(doc => docsArr.push({ id: doc.id, ...doc.data() }));
+    docsArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    docsArr.forEach(d => {
+      const isIncome = d.type === 'in';
+      const amt = Number(d.price) || 0;
+
+      if (isIncome) {
+        totalIn += amt;
+      } else {
+        totalOut += amt;
+      }
       
       list.innerHTML += `
         <div class="card">
-          <p><strong>日期：</strong> ${d.date} | <strong>分類：</strong> ${d.category} | <strong>價錢：</strong> $${d.price}</p>
+          <p>
+            <span class="badge ${isIncome ? 'badge-in' : 'badge-out'}">${isIncome ? '收入' : '支出'}</span>
+            <strong>日期：</strong> ${d.date} | 
+            <strong>分類：</strong> ${d.category} | 
+            <strong>金額：</strong> <span style="color:${isIncome ? '#28a745' : '#dc3545'}; font-weight:bold;">${isIncome ? '+' : '-'}$${amt}</span>
+          </p>
           <div class="btn-group">
-            <button onclick="toggleImg('${id}')">查看圖片</button>
-            <button onclick="downloadImg('${d.url}', '${d.name}')">下載圖片</button>
-            <button class="btn-del" onclick="del('${id}', '${d.name}')">刪除單據</button>
+            ${d.url ? `<button onclick="toggleImg('${d.id}')">查看圖片</button>` : ''}
+            ${d.url ? `<button onclick="downloadImg('${d.url}', '${d.name}')">下載圖片</button>` : ''}
+            <button class="btn-del" onclick="del('${d.id}', '${d.name}')">刪除紀錄</button>
           </div>
-          <img id="img-${id}" src="${d.url}" style="display:none; width:100%; margin-top:10px;">
+          ${d.url ? `<img id="img-${d.id}" src="${d.url}" style="display:none; width:100%; margin-top:10px;">` : ''}
         </div>
       `;
     });
+
+    document.getElementById('stat-in').innerText = `$${totalIn}`;
+    document.getElementById('stat-out').innerText = `$${totalOut}`;
+    document.getElementById('stat-bal').innerText = `$${totalIn - totalOut}`;
   });
 
   function toggleImg(id) {
@@ -188,17 +276,19 @@
 
   // 刪除紀錄與檔案
   async function del(id, name) {
-    if(!confirm("確定要刪除這筆單據嗎？")) return;
+    if(!confirm("確定要刪除這筆紀錄嗎？")) return;
     try {
       await db.collection('claims').doc(id).delete();
-      await storage.ref('claims/' + name).delete();
+      if(name) {
+        await storage.ref('claims/' + name).delete();
+      }
       location.reload();
     } catch (e) {
       alert("刪除失敗：" + e.message);
     }
   }
 
-  // 匯出 Excel
+  // 自動計算收支與累計餘額 Excel 下載
   async function exportToExcel() {
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
@@ -217,52 +307,86 @@
       alert("該範圍內無資料！");
       return;
     }
+
+    // 依日期升序排序以計算正確的流水號餘額
+    const records = [];
+    snap.forEach(doc => records.push(doc.data()));
+    records.sort((a, b) => new Date(a.date) - new Date(b.date));
     
     const rows = [
-      ["購買日期", "分類", "金額 (HKD)", "圖片檔名", "點擊查看圖片"]
+      ["日期", "類型", "分類", "收入 (HKD)", "支出 (HKD)", "結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
     ];
 
-    snap.forEach(doc => {
-      const d = doc.data();
+    let currentBalance = 0;
+
+    records.forEach(d => {
+      const isIncome = d.type === 'in';
+      const amt = Number(d.price) || 0;
+      const incomeAmt = isIncome ? amt : 0;
+      const expenseAmt = !isIncome ? amt : 0;
+
+      currentBalance += (incomeAmt - expenseAmt);
+
       rows.push([
         d.date || "",
+        isIncome ? "收入" : "支出",
         d.category || "",
-        Number(d.price) || 0,
-        d.name || "",
+        incomeAmt,
+        expenseAmt,
+        currentBalance,
+        d.name || "無圖片",
         d.url || ""
       ]);
     });
 
+    // 加入總計行
+    const totalRowIndex = rows.length + 1;
+    rows.push([
+      "總計", 
+      "-", 
+      "-", 
+      `=SUM(D2:D${totalRowIndex-1})`, 
+      `=SUM(E2:E${totalRowIndex-1})`, 
+      `=D${totalRowIndex}-E${totalRowIndex}`, 
+      "-", 
+      "-"
+    ]);
+
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
+    // 設定超連結
     const range = XLSX.utils.decode_range(ws['!ref']);
-    for (let R = 1; R <= range.e.r; ++R) {
-      const cellRef = XLSX.utils.encode_cell({ r: R, c: 4 });
+    for (let R = 1; R <= range.e.r - 1; ++R) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: 7 });
       if (ws[cellRef] && ws[cellRef].v) {
         const url = ws[cellRef].v;
         ws[cellRef] = {
           t: 's',
           v: '點擊查看圖片',
-          l: { Target: url, Tooltip: '開啟收據圖片' }
+          l: { Target: url, Tooltip: '開啟圖片' }
         };
       }
     }
 
+    // 設定欄寬
     ws['!cols'] = [
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 30 },
-      { wch: 20 }
+      { wch: 12 }, // 日期
+      { wch: 8 },  // 類型
+      { wch: 15 }, // 分類
+      { wch: 14 }, // 收入
+      { wch: 14 }, // 支出
+      { wch: 14 }, // 結餘
+      { wch: 25 }, // 檔名
+      { wch: 18 }  // 超連結
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "報帳紀錄");
+    XLSX.utils.book_append_sheet(wb, ws, "收支報表");
     
-    XLSX.writeFile(wb, `Claim_Report_${s}_to_${e}.xlsx`, { bookType: 'xlsx', type: 'binary' });
+    XLSX.writeFile(wb, `Financial_Report_${s}_to_${e}.xlsx`, { bookType: 'xlsx', type: 'binary' });
   }
 
-  // 輔助函式：透過 Firebase Storage SDK 獲取 Blob (可靠解決跨域下載問題)
+  // 輔助函式：透過 Firebase Storage SDK 獲取 Blob
   async function fetchImageBlob(fileName) {
     try {
       const ref = storage.ref('claims/' + fileName);
@@ -324,7 +448,7 @@
       await Promise.all(downloadPromises);
 
       if (Object.keys(zip.files).length === 0) {
-        alert("打包失敗！請確認 Firebase Storage 已開啟 CORS 權限。");
+        alert("該範圍內無可下載的圖片檔案。");
         return;
       }
 
