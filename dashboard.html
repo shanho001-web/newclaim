@@ -49,8 +49,8 @@
     <button class="logout-btn" onclick="logout()">登出</button>
   </div>
 
-  <!-- 財務總覽 -->
-  <div class="summary-grid">
+  <!-- 財務總覽 (僅 Admin 可見) -->
+  <div id="summarySection" class="summary-grid">
     <div class="summary-box bg-in">
       <span>總收入</span>
       <div id="stat-in">$0</div>
@@ -69,7 +69,7 @@
   <label>交易類型：</label>
   <select id="typeInput" onchange="toggleTypeUI()">
     <option value="out">支出 (報帳/記帳)</option>
-    <option value="in">收入 (入數/存入)</option>
+    <option value="in" id="optIncome">收入 (入數/存入)</option>
   </select>
 
   <label>填寫人姓名：</label>
@@ -92,29 +92,53 @@
 
   <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交紀錄</button>
 
-  <hr>
-  <h3>報表與圖片批次下載</h3>
-  <label>開始日期：</label>
-  <input type="date" id="startD">
-  <label>結束日期：</label>
-  <input type="date" id="endD">
-  
-  <div class="export-btn-group">
-    <button onclick="exportToExcel()" style="background:#28a745; color:white; font-weight:bold;">下載 Excel 表格</button>
-    <button onclick="exportImagesZip()" id="zipBtn" style="background:#17a2b8; color:white; font-weight:bold;">下載圖片 ZIP 包</button>
+  <!-- 匯出專區 (僅 Admin 可見) -->
+  <div id="exportSection">
+    <hr>
+    <h3>報表與圖片批次下載</h3>
+    <label>開始日期：</label>
+    <input type="date" id="startD">
+    <label>結束日期：</label>
+    <input type="date" id="endD">
+    
+    <div class="export-btn-group">
+      <button onclick="exportToExcel()" style="background:#28a745; color:white; font-weight:bold;">下載 Excel 表格</button>
+      <button onclick="exportImagesZip()" id="zipBtn" style="background:#17a2b8; color:white; font-weight:bold;">下載圖片 ZIP 包</button>
+    </div>
   </div>
 
+  <hr>
   <h3>歷史紀錄</h3>
   <div id="list">讀取中...</div>
 </div>
 
 <script>
-  // 權限驗證：未登入者強制導回 index.html
+  // 權限驗證與角色切換
   const role = sessionStorage.getItem('role');
+  const currentUserName = sessionStorage.getItem('username') || '';
+
   if (!role) {
     alert("請先登入系統！");
     window.location.href = "index.html";
   }
+
+  // 根據角色隱藏不相干功能
+  window.addEventListener('DOMContentLoaded', () => {
+    const userInputField = document.getElementById('userInput');
+    
+    if (currentUserName) {
+      userInputField.value = currentUserName;
+    }
+
+    if (role !== 'admin') {
+      // 非 Admin (會員)：隱藏總覽、匯出功能與收入選項
+      document.getElementById('summarySection').style.display = 'none';
+      document.getElementById('exportSection').style.display = 'none';
+      
+      const optIncome = document.getElementById('optIncome');
+      if (optIncome) optIncome.remove(); // 移除收入選項
+    }
+  });
 
   function logout() {
     sessionStorage.clear();
@@ -191,8 +215,8 @@
     
     try {
       await db.collection('claims').add({ 
-        type: type, // 'in' 或 'out'
-        userName: userName, // 人名
+        type: type, 
+        userName: userName, 
         date: d, 
         category: c, 
         price: Number(p), 
@@ -209,7 +233,7 @@
     }
   }
 
-  // 渲染歷史紀錄與統計計算
+  // 依權限渲染歷史紀錄
   db.collection('claims').onSnapshot(snap => {
     const list = document.getElementById('list');
     list.innerHTML = '';
@@ -217,10 +241,21 @@
     let totalIn = 0;
     let totalOut = 0;
 
-    // 將資料依日期排序
     const docsArr = [];
-    snap.forEach(doc => docsArr.push({ id: doc.id, ...doc.data() }));
+    snap.forEach(doc => {
+      const data = doc.data();
+      // 權限過濾：Admin 可看所有單據，會員只能看自己的單據
+      if (role === 'admin' || data.userName === currentUserName) {
+        docsArr.push({ id: doc.id, ...data });
+      }
+    });
+
     docsArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (docsArr.length === 0) {
+      list.innerHTML = '<p style="color:#666;">目前無相關紀錄。</p>';
+      return;
+    }
 
     docsArr.forEach(d => {
       const isIncome = d.type === 'in';
@@ -251,9 +286,11 @@
       `;
     });
 
-    document.getElementById('stat-in').innerText = `$${totalIn}`;
-    document.getElementById('stat-out').innerText = `$${totalOut}`;
-    document.getElementById('stat-bal').innerText = `$${totalIn - totalOut}`;
+    if (role === 'admin') {
+      document.getElementById('stat-in').innerText = `$${totalIn}`;
+      document.getElementById('stat-out').innerText = `$${totalOut}`;
+      document.getElementById('stat-bal').innerText = `$${totalIn - totalOut}`;
+    }
   });
 
   function toggleImg(id) {
@@ -294,8 +331,10 @@
     }
   }
 
-  // 精確導出 Excel 包含人名、收入、支出與結餘
+  // Admin 導出 Excel
   async function exportToExcel() {
+    if (role !== 'admin') return;
+
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
     
@@ -314,7 +353,6 @@
       return;
     }
 
-    // 依日期升序排序以計算正確的流水結餘
     const records = [];
     snap.forEach(doc => records.push(doc.data()));
     records.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -346,8 +384,7 @@
       ]);
     });
 
-    // 加入 Excel 自動加總行
-    const lastRowIndex = rows.length; // 目前數據最後一行行號
+    const lastRowIndex = rows.length;
     rows.push([
       "總計", 
       "-",
@@ -362,7 +399,6 @@
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // 設定超連結
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = 1; R <= range.e.r - 1; ++R) {
       const cellRef = XLSX.utils.encode_cell({ r: R, c: 8 });
@@ -376,26 +412,16 @@
       }
     }
 
-    // 設定欄寬
     ws['!cols'] = [
-      { wch: 12 }, // 日期
-      { wch: 12 }, // 經辦人
-      { wch: 8 },  // 類型
-      { wch: 15 }, // 分類
-      { wch: 14 }, // 收入
-      { wch: 14 }, // 支出
-      { wch: 14 }, // 結餘
-      { wch: 25 }, // 檔名
-      { wch: 18 }  // 超連結
+      { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, 
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 18 }
     ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "收支報表");
-    
     XLSX.writeFile(wb, `Financial_Report_${s}_to_${e}.xlsx`, { bookType: 'xlsx', type: 'binary' });
   }
 
-  // 輔助函式：透過 Firebase Storage SDK 獲取 Blob
   async function fetchImageBlob(fileName) {
     try {
       const ref = storage.ref('claims/' + fileName);
@@ -409,8 +435,10 @@
     }
   }
 
-  // 批次下載圖片 ZIP 包
+  // Admin 導出 ZIP
   async function exportImagesZip() {
+    if (role !== 'admin') return;
+
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
     const zipBtn = document.getElementById('zipBtn');
