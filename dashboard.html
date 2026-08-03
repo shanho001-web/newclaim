@@ -11,7 +11,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
   <!-- Excel Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- JSZip & FileSaver (用於批次打包 ZIP) -->
+  <!-- JSZip & FileSaver -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
@@ -261,7 +261,37 @@
     XLSX.writeFile(wb, `Claim_Report_${s}_to_${e}.xlsx`, { bookType: 'xlsx', type: 'binary' });
   }
 
-  // 新增：下載指定日期範圍內所有圖片的 ZIP 壓縮包
+  // 輔助函式：可靠地取得圖片 Blob (雙重備用機制)
+  function fetchImageBlob(url) {
+    return new Promise((resolve, reject) => {
+      fetch(url)
+        .then(res => {
+          if (!res.ok) throw new Error("HTTP error " + res.status);
+          return res.blob();
+        })
+        .then(blob => resolve(blob))
+        .catch(() => {
+          // 若 fetch 被 CORS 擋下，使用 Image + Canvas 機制載入
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(blob => {
+              if (blob) resolve(blob);
+              else reject(new Error("Canvas toBlob 失敗"));
+            }, "image/jpeg", 0.95);
+          };
+          img.onerror = () => reject(new Error("圖片載入失敗"));
+          img.src = url;
+        });
+    });
+  }
+
+  // 下載指定日期範圍內所有圖片的 ZIP 壓縮包
   async function exportImagesZip() {
     const s = document.getElementById('startD').value;
     const e = document.getElementById('endD').value;
@@ -289,35 +319,39 @@
       }
 
       const zip = new JSZip();
-      let completedCount = 0;
-      const totalCount = snap.docs.length;
+      let completed = 0;
+      const total = snap.docs.length;
 
-      zipBtn.innerText = `準備下載圖片 (0/${totalCount})...`;
+      zipBtn.innerText = `準備下載 (0/${total})...`;
 
-      // 逐一抓取圖片數據並放入 ZIP 包中
-      for (const doc of snap.docs) {
+      // 使用 Promise.all 並行處理解析所有圖片
+      const downloadPromises = snap.docs.map(async doc => {
         const d = doc.data();
         if (d.url && d.name) {
           try {
-            const resp = await fetch(d.url);
-            const blob = await resp.blob();
+            const blob = await fetchImageBlob(d.url);
             zip.file(d.name, blob);
+            completed++;
+            zipBtn.innerText = `下載中 (${completed}/${total})...`;
           } catch (err) {
-            console.error("圖片抓取失敗：", d.name, err);
+            console.error("無法載入圖片：", d.name, err);
           }
         }
-        completedCount++;
-        zipBtn.innerText = `打包進度 (${completedCount}/${totalCount})...`;
+      });
+
+      await Promise.all(downloadPromises);
+
+      if (Object.keys(zip.files).length === 0) {
+        alert("無法獲取圖片檔案，請確認 Firebase Storage CORS 權限或圖片連結有效。");
+        return;
       }
 
-      zipBtn.innerText = "壓縮包生成中...";
-      
-      // 生成並發送下載
+      zipBtn.innerText = "生成 ZIP 壓縮包中...";
       const zipContent = await zip.generateAsync({ type: "blob" });
       saveAs(zipContent, `Receipt_Images_${s}_to_${e}.zip`);
 
     } catch (err) {
-      alert("打包過程發生錯誤：" + err.message);
+      alert("打包失敗：" + err.message);
     } finally {
       zipBtn.innerText = "下載圖片 ZIP 包";
       zipBtn.disabled = false;
