@@ -18,22 +18,26 @@
     .container { max-width: 650px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     input, select, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     input:disabled { background-color: #e9ecef; cursor: not-allowed; }
-    .card { border: 1px solid #ddd; padding: 15px; margin-top: 15px; background: #fff; border-radius: 4px; }
-    .btn-group { display: flex; gap: 5px; margin-top: 10px; }
-    .btn-del { color: red; font-weight: bold; }
+    .card { border: 1px solid #ddd; padding: 15px; margin-top: 15px; background: #fff; border-radius: 4px; position: relative; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .btn-group button { width: auto; padding: 6px 12px; font-size: 13px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+    .btn-del { background: #dc3545; color: white; }
     .header-bar { display: flex; justify-content: space-between; align-items: center; }
     .logout-btn { width: auto; background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
     .export-btn-group { display: flex; gap: 10px; }
-    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 15px 0; }
-    .summary-box { padding: 12px; border-radius: 6px; text-align: center; color: white; font-weight: bold; }
+    /* 收支表升級為 4 欄並響應式排版 */
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 15px 0; }
+    .summary-box { padding: 12px; border-radius: 6px; text-align: center; color: white; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .bg-in { background-color: #28a745; }
     .bg-out { background-color: #dc3545; }
     .bg-bal { background-color: #007bff; }
+    .bg-warn { background-color: #fd7e14; } /* 新增未 Claim 顏色 */
     .summary-box span { display: block; font-size: 12px; font-weight: normal; margin-bottom: 4px; }
     .summary-box div { font-size: 18px; }
-    .badge { padding: 3px 8px; border-radius: 4px; color: white; font-size: 12px; font-weight: bold; display: inline-block; }
+    .badge { padding: 3px 8px; border-radius: 4px; color: white; font-size: 12px; font-weight: bold; display: inline-block; margin-right: 5px; }
     .badge-in { background: #28a745; }
     .badge-out { background: #dc3545; }
+    .badge-status { background: #ffc107; color: #000; }
   </style>
 </head>
 <body>
@@ -46,9 +50,10 @@
 
   <!-- 財務總覽 (僅 Admin 可見) -->
   <div id="summarySection" class="summary-grid">
-    <div class="summary-box bg-in"><span>總收入</span><div id="stat-in">$0</div></div>
-    <div class="summary-box bg-out"><span>總支出</span><div id="stat-out">$0</div></div>
+    <div class="summary-box bg-in"><span>總收入 (已入數)</span><div id="stat-in">$0</div></div>
+    <div class="summary-box bg-out"><span>總支出 (已入數)</span><div id="stat-out">$0</div></div>
     <div class="summary-box bg-bal"><span>當前結餘</span><div id="stat-bal">$0</div></div>
+    <div class="summary-box bg-warn"><span>未 Claim 總額</span><div id="stat-unclaimed">$0</div></div>
   </div>
   
   <!-- 輸入區 -->
@@ -76,7 +81,7 @@
   <label id="fileLabel">上載收據圖片：</label>
   <input type="file" id="fileInput">
 
-  <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交紀錄</button>
+  <button onclick="submitClaim()" id="subBtn" style="background:#007bff; color:white; font-weight:bold;">提交紀錄 (預設為未 Claim)</button>
 
   <!-- 匯出專區 (僅 Admin 可見) -->
   <div id="exportSection">
@@ -166,12 +171,13 @@
         url = await ref.getDownloadURL();
       } catch (err) {
         alert("圖片上載失敗: " + err.message);
-        document.getElementById('subBtn').innerText = "提交紀錄";
+        document.getElementById('subBtn').innerText = "提交紀錄 (預設為未 Claim)";
         return;
       }
     }
     
     try {
+      // 🌟 更新：新增單據時，預設寫入 status: 'unclaimed'
       await db.collection('claims').add({ 
         type: type, 
         userName: currentUserName, 
@@ -180,14 +186,26 @@
         price: Number(p), 
         url: url, 
         name: fileName,
+        status: 'unclaimed', 
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       
-      alert("紀錄提交成功！");
+      alert("紀錄提交成功！(狀態為：未 Claim)");
       location.reload();
     } catch (err) {
       alert("提交失敗: " + err.message);
-      document.getElementById('subBtn').innerText = "提交紀錄";
+      document.getElementById('subBtn').innerText = "提交紀錄 (預設為未 Claim)";
+    }
+  }
+
+  // 🌟 更新：手動將單據轉為正式入帳的功能
+  async function markAsClaimed(id) {
+    if(!confirm("確定將此單據標記為「已 Claim」並正式入數嗎？\n(這將會更新收支總計)")) return;
+    try {
+      await db.collection('claims').doc(id).update({ status: 'claimed' });
+      // Firebase onSnapshot 會自動捕捉更新，無須重整頁面
+    } catch (e) {
+      alert("狀態更新失敗：" + e.message);
     }
   }
 
@@ -198,11 +216,11 @@
     
     let totalIn = 0;
     let totalOut = 0;
+    let totalUnclaimed = 0; // 🌟 新增：計算未 Claim 的總額
 
     const docsArr = [];
     snap.forEach(doc => {
       const data = doc.data();
-      // 會員只看自己填寫的單據，Admin 可看所有單據
       if (role === 'admin' || data.userName === currentUserName) {
         docsArr.push({ id: doc.id, ...data });
       }
@@ -218,24 +236,37 @@
     docsArr.forEach(d => {
       const isIncome = d.type === 'in';
       const amt = Number(d.price) || 0;
+      
+      // 🌟 判斷狀態：若無 status 欄位（舊資料）則預設視為已 Claim，以免歷史結餘錯亂
+      const isUnclaimed = d.status === 'unclaimed';
 
-      if (isIncome) totalIn += amt;
-      else totalOut += amt;
+      if (isUnclaimed) {
+        totalUnclaimed += amt; // 未入帳的只算進未 Claim 總數
+      } else {
+        if (isIncome) totalIn += amt;
+        else totalOut += amt; // 正式入帳的才算進結餘
+      }
       
       list.innerHTML += `
-        <div class="card">
+        <div class="card ${isUnclaimed ? 'unclaimed-card' : ''}" style="${isUnclaimed ? 'border-left: 5px solid #ffc107;' : 'border-left: 5px solid #28a745;'}">
           <p>
+            ${isUnclaimed ? '<span class="badge badge-status">待處理 (未 Claim)</span>' : '<span class="badge" style="background:#28a745;">已入帳</span>'}
             <span class="badge ${isIncome ? 'badge-in' : 'badge-out'}">${isIncome ? '收入' : '支出'}</span>
             <strong>日期：</strong> ${d.date} | <strong>經辦人：</strong> ${d.userName || '-'} | 
             <strong>分類：</strong> ${d.category} | 
             <strong>金額：</strong> <span style="color:${isIncome ? '#28a745' : '#dc3545'}; font-weight:bold;">${isIncome ? '+' : '-'}$${amt}</span>
           </p>
           <div class="btn-group">
-            ${d.url ? `<button onclick="toggleImg('${d.id}')">查看圖片</button>` : ''}
-            ${d.url ? `<button onclick="downloadImg('${d.url}', '${d.name}')">下載圖片</button>` : ''}
+            <!-- 🌟 狀態控制按鈕：只有管理員或未Claim時才顯示特定按鈕 -->
+            ${isUnclaimed 
+              ? `<button style="background:#ffc107; color:black;" onclick="markAsClaimed('${d.id}')">轉換為「已 Claim」</button>`
+              : `<button disabled style="background:#e9ecef; color:#6c757d; cursor:not-allowed;">已正式入帳</button>`
+            }
+            ${d.url ? `<button style="background:#17a2b8; color:white;" onclick="toggleImg('${d.id}')">查看圖片</button>` : ''}
+            ${d.url ? `<button style="background:#6c757d; color:white;" onclick="downloadImg('${d.url}', '${d.name}')">下載圖片</button>` : ''}
             <button class="btn-del" onclick="del('${d.id}', '${d.name}')">刪除紀錄</button>
           </div>
-          ${d.url ? `<img id="img-${d.id}" src="${d.url}" style="display:none; width:100%; margin-top:10px;">` : ''}
+          ${d.url ? `<img id="img-${d.id}" src="${d.url}" style="display:none; width:100%; margin-top:10px; border-radius:4px;">` : ''}
         </div>
       `;
     });
@@ -244,6 +275,7 @@
       document.getElementById('stat-in').innerText = `$${totalIn}`;
       document.getElementById('stat-out').innerText = `$${totalOut}`;
       document.getElementById('stat-bal').innerText = `$${totalIn - totalOut}`;
+      document.getElementById('stat-unclaimed').innerText = `$${totalUnclaimed}`;
     }
   });
 
@@ -274,13 +306,13 @@
     try {
       await db.collection('claims').doc(id).delete();
       if(name) await storage.ref('claims/' + name).delete();
-      location.reload();
+      // onSnapshot 會自動更新，不需 reload
     } catch (e) {
       alert("刪除失敗：" + e.message);
     }
   }
 
-  // Excel 匯出 (修復 CDN 後正常運行)
+  // 🌟 Excel 匯出升級：加入「狀態」欄位，並且結餘只算已 Claim 的
   async function exportToExcel() {
     if (role !== 'admin') return alert("僅限管理員匯出！");
     const s = document.getElementById('startD').value;
@@ -296,43 +328,54 @@
       records.sort((a, b) => new Date(a.date) - new Date(b.date));
 
       const rows = [
-        ["日期", "經辦人", "類型", "分類", "收入 (HKD)", "支出 (HKD)", "結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
+        ["狀態", "日期", "經辦人", "類型", "分類", "正式收入 (HKD)", "正式支出 (HKD)", "實際結餘 (HKD)", "證明/收據檔名", "點擊查看圖片"]
       ];
 
       let currentBalance = 0;
       records.forEach(d => {
+        const isUnclaimed = d.status === 'unclaimed';
         const isIncome = (d.type === 'in');
         const amt = Number(d.price) || 0;
-        const incomeAmt = isIncome ? amt : 0;
-        const expenseAmt = !isIncome ? amt : 0;
+        
+        // 只有「已 Claim」的才算進報表正式收入/支出中
+        const incomeAmt = (!isUnclaimed && isIncome) ? amt : 0;
+        const expenseAmt = (!isUnclaimed && !isIncome) ? amt : 0;
         currentBalance += (incomeAmt - expenseAmt);
 
         rows.push([
-          d.date || "", d.userName || "-", isIncome ? "收入" : "支出", d.category || "",
-          incomeAmt, expenseAmt, currentBalance, d.name || "無圖片", d.url || ""
+          isUnclaimed ? "未 Claim" : "已入帳",
+          d.date || "", 
+          d.userName || "-", 
+          isIncome ? "收入" : "支出", 
+          d.category || "",
+          incomeAmt, 
+          expenseAmt, 
+          currentBalance, 
+          d.name || "無圖片", 
+          d.url || ""
         ]);
       });
 
       const lastRowIndex = rows.length;
       rows.push([
-        "總計", "-", "-", "-", 
-        `=SUM(E2:E${lastRowIndex})`, 
+        "總計", "-", "-", "-", "-", 
         `=SUM(F2:F${lastRowIndex})`, 
-        `=E${lastRowIndex+1}-F${lastRowIndex+1}`, 
+        `=SUM(G2:G${lastRowIndex})`, 
+        `=F${lastRowIndex+1}-G${lastRowIndex+1}`, 
         "-", "-"
       ]);
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       const range = XLSX.utils.decode_range(ws['!ref']);
       for (let R = 1; R <= range.e.r - 1; ++R) {
-        const cellRef = XLSX.utils.encode_cell({ r: R, c: 8 });
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: 9 });
         if (ws[cellRef] && ws[cellRef].v) {
           const url = ws[cellRef].v;
           ws[cellRef] = { t: 's', v: '點擊查看圖片', l: { Target: url, Tooltip: '開啟圖片' } };
         }
       }
 
-      ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 18 }];
+      ws['!cols'] = [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 18 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "收支報表");
       XLSX.writeFile(wb, `Financial_Report_${s}_to_${e}.xlsx`);
@@ -341,7 +384,7 @@
     }
   }
 
-  // ZIP 下載 (修復 CDN 後正常運行)
+  // ZIP 下載 (維持原樣)
   async function exportImagesZip() {
     if (role !== 'admin') return alert("僅限管理員下載！");
     const s = document.getElementById('startD').value;
