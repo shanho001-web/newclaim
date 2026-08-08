@@ -3,15 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>索償系統 - 登入與註冊</title>
+    <title>索償系統 - 會員登入與註冊</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
-        .tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; font-weight: bold; color: #888; }
-        .tab.active { color: #007aff; border-bottom: 2px solid #007aff; }
-        .form-group { display: none; }
-        .form-group.active { display: block; }
         .input-group { margin-bottom: 15px; position: relative; }
         label { display: block; font-size: 14px; color: #666; margin-bottom: 5px; }
         input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
@@ -39,16 +34,13 @@
 <body>
 
 <div class="card">
-    <div class="tabs">
-        <div class="tab active" onclick="switchTab('member')">會員專區</div>
-        <div class="tab" onclick="switchTab('admin')">管理員登入</div>
-    </div>
-
-    <!-- 1. 會員專區 -->
-    <div id="member-form" class="form-group active">
+    
+    <!-- 會員專區 (移除了原本的 Tabs 切換設計) -->
+    <div id="member-form">
+        
         <!-- 會員登入 -->
         <div id="login-box">
-            <h2>會員登入</h2>
+            <h2 style="text-align: center; color: #333; margin-bottom: 20px;">會員登入</h2>
             <div class="input-group">
                 <label>電郵地址</label>
                 <input type="email" id="member-email" placeholder="example@domain.com">
@@ -67,7 +59,7 @@
 
         <!-- 會員註冊 -->
         <div id="register-box" style="display: none;">
-            <h2>會員註冊</h2>
+            <h2 style="text-align: center; color: #333; margin-bottom: 20px;">會員註冊</h2>
             <div class="input-group">
                 <label>真實姓名</label>
                 <input type="text" id="reg-name" placeholder="請輸入您的真實姓名">
@@ -95,26 +87,10 @@
             <div class="switch-link" onclick="toggleRegisterView(false)">已有帳號？返回登入</div>
         </div>
     </div>
-
-    <!-- 2. 管理員登入 -->
-    <div id="admin-form" class="form-group">
-        <h2>管理員登入</h2>
-        <div class="input-group">
-            <label>帳號</label>
-            <input type="text" id="admin-id" placeholder="請輸入管理員帳號" value="Admin">
-        </div>
-        <div class="input-group">
-            <label>密碼</label>
-            <div class="pw-container">
-                <input type="password" id="admin-pw" placeholder="請輸入密碼">
-                <span class="toggle-pw" onclick="togglePassword('admin-pw', this)">顯示</span>
-            </div>
-        </div>
-        <button onclick="loginAdmin()">登入系統</button>
-    </div>
 </div>
 
 <script>
+    // 你的專屬 Firebase 連線設定 (無需更改)
     const firebaseConfig = {
         apiKey: "AIzaSyBRmm7eV-Yw0LG0Y2mFwcnt5pew2Y1as1w",
         authDomain: "new-claim-dcc61.firebaseapp.com",
@@ -129,21 +105,11 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
+    // EmailJS 金鑰設定 (無需更改)
     emailjs.init("BPAFFubzN1MfkA89K");
     let generatedCode = "";
 
-    function switchTab(tab) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.form-group').forEach(f => f.classList.remove('active'));
-        if (tab === 'member') {
-            document.querySelectorAll('.tab')[0].classList.add('active');
-            document.getElementById('member-form').classList.add('active');
-        } else {
-            document.querySelectorAll('.tab')[1].classList.add('active');
-            document.getElementById('admin-form').classList.add('active');
-        }
-    }
-
+    // 介面切換功能
     function toggleRegisterView(showRegister) {
         document.getElementById('login-box').style.display = showRegister ? 'none' : 'block';
         document.getElementById('register-box').style.display = showRegister ? 'block' : 'none';
@@ -160,6 +126,7 @@
         }
     }
 
+    // 註冊流程相關功能
     function sendVerificationCode() {
         const email = document.getElementById('reg-email').value.trim().toLowerCase();
         if (!email) return alert('請先輸入電郵地址');
@@ -173,18 +140,6 @@
         }).catch(err => {
             alert('驗證碼發送失敗：' + JSON.stringify(err));
         });
-    }
-
-    async function resetPassword() {
-        const email = document.getElementById('member-email').value.trim().toLowerCase();
-        if (!email) return alert('請先在「電郵地址」欄位輸入 Email');
-
-        try {
-            await auth.sendPasswordResetEmail(email);
-            alert('重設密碼郵件已發送至：' + email);
-        } catch (e) {
-            alert('發送失敗：' + e.message);
-        }
     }
 
     async function registerMember() {
@@ -216,6 +171,7 @@
         }
     }
 
+    // 登入流程功能
     async function loginMember() {
         const email = document.getElementById('member-email').value.trim().toLowerCase();
         const pw = document.getElementById('member-pw').value.trim();
@@ -230,7 +186,8 @@
                 userName = userDoc.data().userName;
             }
 
-            sessionStorage.setItem('role', 'member');
+            // 無論是 admin 還是 member，都根據資料庫寫入的 role 放行
+            sessionStorage.setItem('role', userDoc.exists && userDoc.data().role === 'admin' ? 'admin' : 'member');
             sessionStorage.setItem('username', userName);
             sessionStorage.setItem('userEmail', email);
 
@@ -240,16 +197,16 @@
         }
     }
 
-    function loginAdmin() {
-        const id = document.getElementById('admin-id').value.trim();
-        const pw = document.getElementById('admin-pw').value.trim();
+    // 重設密碼功能
+    async function resetPassword() {
+        const email = document.getElementById('member-email').value.trim().toLowerCase();
+        if (!email) return alert('請先在「電郵地址」欄位輸入 Email');
 
-        if (id === 'Admin' && pw === '61399638') {
-            sessionStorage.setItem('role', 'admin');
-            sessionStorage.setItem('username', 'Admin');
-            window.location.href = 'dashboard.html';
-        } else {
-            alert('Admin 帳號或密碼錯誤！');
+        try {
+            await auth.sendPasswordResetEmail(email);
+            alert('重設密碼郵件已發送至：' + email);
+        } catch (e) {
+            alert('發送失敗：' + e.message);
         }
     }
 </script>
